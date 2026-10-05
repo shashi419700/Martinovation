@@ -1,4 +1,764 @@
+// import React, { useEffect, useRef, useState } from "react";
+// import {
+//   View,
+//   Text,
+//   StyleSheet,
+//   TouchableOpacity,
+//   ImageBackground,
+//   Animated,
+//   Platform,
+//   Dimensions,
+//   ActivityIndicator,
+// } from "react-native";
+// import { Ionicons } from "@expo/vector-icons";
+// import * as Location from "expo-location";
+// import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// const { width } = Dimensions.get("window");
+
+// export default function HomeHeader({ navigation }) {
+//   const insets = useSafeAreaInsets();
+
+//   const [locationName, setLocationName] = useState(
+//     "Detecting location..."
+//   );
+
+//   const [locationLoading, setLocationLoading] = useState(true);
+
+//   const [locationError, setLocationError] = useState(false);
+
+//   // Animations
+//   const fadeAnim = useRef(new Animated.Value(0)).current;
+//   const slideAnim = useRef(new Animated.Value(18)).current;
+//   const scaleAnim = useRef(new Animated.Value(0.96)).current;
+
+//   const menuRotate = useRef(new Animated.Value(0)).current;
+//   const regionScale = useRef(new Animated.Value(1)).current;
+
+//   useEffect(() => {
+//     startEntranceAnimation();
+//     fetchCurrentLocation();
+//   }, []);
+
+//   // ---------------------------------------
+//   // HEADER ENTRANCE ANIMATION
+//   // ---------------------------------------
+
+//   const startEntranceAnimation = () => {
+//     Animated.parallel([
+//       Animated.timing(fadeAnim, {
+//         toValue: 1,
+//         duration: 650,
+//         useNativeDriver: true,
+//       }),
+
+//       Animated.timing(slideAnim, {
+//         toValue: 0,
+//         duration: 650,
+//         useNativeDriver: true,
+//       }),
+
+//       Animated.spring(scaleAnim, {
+//         toValue: 1,
+//         friction: 7,
+//         tension: 45,
+//         useNativeDriver: true,
+//       }),
+//     ]).start();
+//   };
+
+//   // ---------------------------------------
+//   // AUTOMATIC LOCATION
+//   // ---------------------------------------
+
+//   const fetchCurrentLocation = async () => {
+//     try {
+//       setLocationLoading(true);
+//       setLocationError(false);
+
+//       // Ask user for permission
+//       const { status } =
+//         await Location.requestForegroundPermissionsAsync();
+
+//       if (status !== "granted") {
+//         setLocationError(true);
+//         setLocationName("Location unavailable");
+//         setLocationLoading(false);
+//         return;
+//       }
+
+//       // Get current GPS position
+//       const position =
+//         await Location.getCurrentPositionAsync({
+//           accuracy: Location.Accuracy.Balanced,
+//         });
+
+//       const { latitude, longitude } =
+//         position.coords;
+
+//       // Convert coordinates into readable address
+//       const addresses =
+//         await Location.reverseGeocodeAsync({
+//           latitude,
+//           longitude,
+//         });
+
+//       if (!addresses || addresses.length === 0) {
+//         setLocationName("Current location");
+//         setLocationLoading(false);
+//         return;
+//       }
+
+//       const address = addresses[0];
+
+//       const city =
+//         address.city ||
+//         address.subregion ||
+//         address.district;
+
+//       const region =
+//         address.region;
+
+//       const country =
+//         address.country;
+
+//       // Prefer city + state
+//       if (city && region) {
+//         setLocationName(`${city}, ${region}`);
+//       } else if (city) {
+//         setLocationName(city);
+//       } else if (region) {
+//         setLocationName(region);
+//       } else if (country) {
+//         setLocationName(country);
+//       } else {
+//         setLocationName("Current location");
+//       }
+//     } catch (error) {
+//       console.log(
+//         "Location error:",
+//         error
+//       );
+
+//       setLocationError(true);
+//       setLocationName("Location unavailable");
+//     } finally {
+//       setLocationLoading(false);
+//     }
+//   };
+
+//   // ---------------------------------------
+//   // MENU
+//   // ---------------------------------------
+
+//   const animateMenu = () => {
+//     Animated.sequence([
+//       Animated.timing(menuRotate, {
+//         toValue: 1,
+//         duration: 120,
+//         useNativeDriver: true,
+//       }),
+
+//       Animated.timing(menuRotate, {
+//         toValue: 0,
+//         duration: 180,
+//         useNativeDriver: true,
+//       }),
+//     ]).start();
+
+//     if (navigation?.openDrawer) {
+//       navigation.openDrawer();
+//     }
+//   };
+
+//   // ---------------------------------------
+//   // REGION PRESS
+//   // ---------------------------------------
+
+//   const animateRegion = () => {
+//     Animated.sequence([
+//       Animated.timing(regionScale, {
+//         toValue: 0.96,
+//         duration: 90,
+//         useNativeDriver: true,
+//       }),
+
+//       Animated.spring(regionScale, {
+//         toValue: 1,
+//         friction: 5,
+//         tension: 100,
+//         useNativeDriver: true,
+//       }),
+//     ]).start();
+
+//     // Refresh location when user taps
+//     fetchCurrentLocation();
+//   };
+
+//   const menuRotation =
+//     menuRotate.interpolate({
+//       inputRange: [0, 1],
+//       outputRange: ["0deg", "-8deg"],
+//     });
+
+//   return (
+//     <Animated.View
+//       style={[
+//         styles.wrapper,
+//         {
+//           opacity: fadeAnim,
+//           transform: [
+//             {
+//               translateY: slideAnim,
+//             },
+//             {
+//               scale: scaleAnim,
+//             },
+//           ],
+//         },
+//       ]}
+//     >
+//       <ImageBackground
+//         source={require("../../assets/login.jpg")}
+//         style={[
+//           styles.headerBackground,
+//           {
+//             paddingTop: Math.max(
+//               insets.top,
+//               12
+//             ),
+//           },
+//         ]}
+//         resizeMode="cover"
+//         imageStyle={styles.backgroundImage}
+//       >
+//         {/* Overlay */}
+//         <View style={styles.overlay} />
+
+//         {/* Glow */}
+//         <View style={styles.glowOne} />
+//         <View style={styles.glowTwo} />
+
+//         <View style={styles.headerContent}>
+//           {/* ================================= */}
+//           {/* TOP BAR */}
+//           {/* ================================= */}
+
+//           <View style={styles.topRow}>
+//             {/* MENU */}
+//             <TouchableOpacity
+//               activeOpacity={0.75}
+//               style={styles.menuButton}
+//               onPress={animateMenu}
+//             >
+//               <Animated.View
+//                 style={{
+//                   transform: [
+//                     {
+//                       rotate: menuRotation,
+//                     },
+//                   ],
+//                 }}
+//               >
+//                 <Ionicons
+//                   name="menu-outline"
+//                   size={28}
+//                   color="#FFFFFF"
+//                 />
+//               </Animated.View>
+//             </TouchableOpacity>
+
+//             {/* BRAND */}
+//             <View style={styles.brandContainer}>
+//               <View style={styles.logoShadow}>
+//                 <View style={styles.logo}>
+//                   <Ionicons
+//                     name="navigate"
+//                     size={25}
+//                     color="#FFFFFF"
+//                   />
+//                 </View>
+//               </View>
+
+//               <View
+//                 style={styles.brandTextContainer}
+//               >
+//                 <Text
+//                   style={styles.brandName}
+//                   numberOfLines={1}
+//                 >
+//                   Rakshaसेतू
+//                 </Text>
+
+//                 <View style={styles.taglineRow}>
+//                   <View style={styles.taglineDot} />
+
+//                   <Text
+//                     style={styles.brandTagline}
+//                     numberOfLines={1}
+//                   >
+//                     Smarter Logistics. Safer Tomorrow.
+//                   </Text>
+//                 </View>
+//               </View>
+//             </View>
+
+//             {/* PROFILE */}
+//             <TouchableOpacity
+//               activeOpacity={0.75}
+//               style={styles.profileButton}
+//               onPress={() =>
+//                 navigation?.navigate?.(
+//                   "Profile"
+//                 )
+//               }
+//             >
+//               <Ionicons
+//                 name="person-outline"
+//                 size={21}
+//                 color="#FFFFFF"
+//               />
+//             </TouchableOpacity>
+//           </View>
+
+//           {/* ================================= */}
+//           {/* GREETING */}
+//           {/* ================================= */}
+
+//           <View style={styles.greetingContainer}>
+//             <Text style={styles.greeting}>
+//               Good Morning,
+//             </Text>
+
+//             <Text style={styles.greetingSub}>
+//               Here's the latest update on Rakshaसेतू & accessibility.
+//             </Text>
+//           </View>
+
+//           {/* ================================= */}
+//           {/* AUTOMATIC LOCATION */}
+//           {/* ================================= */}
+
+//           <Animated.View
+//             style={{
+//               transform: [
+//                 {
+//                   scale: regionScale,
+//                 },
+//               ],
+//             }}
+//           >
+//             <TouchableOpacity
+//               activeOpacity={0.85}
+//               style={styles.regionRow}
+//               onPress={animateRegion}
+//             >
+//               {/* Location icon */}
+//               <View
+//                 style={
+//                   styles.locationIconContainer
+//                 }
+//               >
+//                 {locationLoading ? (
+//                   <ActivityIndicator
+//                     size="small"
+//                     color="#FFFFFF"
+//                   />
+//                 ) : (
+//                   <Ionicons
+//                     name={
+//                       locationError
+//                         ? "location-outline"
+//                         : "location"
+//                     }
+//                     size={18}
+//                     color="#FFFFFF"
+//                   />
+//                 )}
+//               </View>
+
+//               {/* Location text */}
+//               <View
+//                 style={styles.regionTextContainer}
+//               >
+//                 <Text
+//                   style={styles.regionLabel}
+//                 >
+//                   CURRENT LOCATION
+//                 </Text>
+
+//                 <Text
+//                   style={styles.regionText}
+//                   numberOfLines={1}
+//                 >
+//                   {locationName}
+//                 </Text>
+//               </View>
+
+//               {/* Refresh */}
+//               <TouchableOpacity
+//                 activeOpacity={0.7}
+//                 style={styles.refreshButton}
+//                 onPress={fetchCurrentLocation}
+//               >
+//                 <Ionicons
+//                   name="refresh"
+//                   size={17}
+//                   color="#FFFFFF"
+//                 />
+//               </TouchableOpacity>
+//             </TouchableOpacity>
+//           </Animated.View>
+//         </View>
+
+//         {/* Bottom line */}
+//         <View style={styles.bottomLine} />
+//       </ImageBackground>
+//     </Animated.View>
+//   );
+// }
+
+// const styles = StyleSheet.create({
+//   wrapper: {
+//     width: "100%",
+//     backgroundColor: "#07558D",
+//   },
+
+//   headerBackground: {
+//     width: "100%",
+//     minHeight: 295,
+//     overflow: "hidden",
+//   },
+
+//   backgroundImage: {
+//     opacity: 0.95,
+//   },
+
+//   overlay: {
+//     ...StyleSheet.absoluteFillObject,
+//     backgroundColor:
+//       "rgba(3, 48, 84, 0.72)",
+//   },
+
+//   glowOne: {
+//     position: "absolute",
+
+//     width: 190,
+//     height: 190,
+
+//     borderRadius: 95,
+
+//     backgroundColor:
+//       "rgba(52, 191, 255, 0.15)",
+
+//     top: -80,
+//     right: -60,
+//   },
+
+//   glowTwo: {
+//     position: "absolute",
+
+//     width: 150,
+//     height: 150,
+
+//     borderRadius: 75,
+
+//     backgroundColor:
+//       "rgba(0, 157, 255, 0.10)",
+
+//     bottom: -70,
+//     left: -50,
+//   },
+
+//   headerContent: {
+//     paddingHorizontal: 20,
+//     paddingBottom: 30,
+//   },
+
+//   topRow: {
+//     flexDirection: "row",
+//     alignItems: "center",
+//     minHeight: 58,
+//   },
+
+//   menuButton: {
+//     width: 46,
+//     height: 46,
+
+//     borderRadius: 15,
+
+//     alignItems: "center",
+//     justifyContent: "center",
+
+//     backgroundColor:
+//       "rgba(255,255,255,0.12)",
+
+//     borderWidth: 1,
+//     borderColor:
+//       "rgba(255,255,255,0.20)",
+
+//     marginRight: 10,
+
+//     ...Platform.select({
+//       android: {
+//         elevation: 3,
+//       },
+
+//       ios: {
+//         shadowColor: "#000",
+//         shadowOpacity: 0.15,
+//         shadowRadius: 6,
+//         shadowOffset: {
+//           width: 0,
+//           height: 3,
+//         },
+//       },
+//     }),
+//   },
+
+//   brandContainer: {
+//     flex: 1,
+//     minWidth: 0,
+
+//     flexDirection: "row",
+//     alignItems: "center",
+//   },
+
+//   logoShadow: {
+//     width: 50,
+//     height: 50,
+
+//     borderRadius: 25,
+
+//     padding: 2,
+
+//     backgroundColor:
+//       "rgba(103,212,255,0.40)",
+
+//     marginRight: 9,
+//   },
+
+//   logo: {
+//     flex: 1,
+
+//     borderRadius: 23,
+
+//     alignItems: "center",
+//     justifyContent: "center",
+
+//     backgroundColor: "#0877B8",
+
+//     borderWidth: 1,
+//     borderColor:
+//       "rgba(255,255,255,0.35)",
+//   },
+
+//   brandTextContainer: {
+//     flex: 1,
+//     minWidth: 0,
+//   },
+
+//   brandName: {
+//     color: "#FFFFFF",
+
+//     fontSize: width < 360 ? 21 : 24,
+
+//     fontWeight: "800",
+
+//     letterSpacing: 0.2,
+//   },
+
+//   taglineRow: {
+//     flexDirection: "row",
+//     alignItems: "center",
+
+//     marginTop: 2,
+//   },
+
+//   taglineDot: {
+//     width: 5,
+//     height: 5,
+
+//     borderRadius: 3,
+
+//     backgroundColor: "#67D4FF",
+
+//     marginRight: 5,
+//   },
+
+//   brandTagline: {
+//     flex: 1,
+
+//     color: "#D8F3FF",
+
+//     fontSize:
+//       width < 360 ? 9 : 10.5,
+
+//     fontWeight: "500",
+//   },
+
+//   profileButton: {
+//     width: 46,
+//     height: 46,
+
+//     borderRadius: 23,
+
+//     alignItems: "center",
+//     justifyContent: "center",
+
+//     backgroundColor:
+//       "rgba(7,105,163,0.85)",
+
+//     borderWidth: 1.5,
+//     borderColor:
+//       "rgba(255,255,255,0.75)",
+
+//     marginLeft: 8,
+
+//     ...Platform.select({
+//       android: {
+//         elevation: 4,
+//       },
+
+//       ios: {
+//         shadowColor: "#000",
+//         shadowOpacity: 0.18,
+//         shadowRadius: 6,
+//         shadowOffset: {
+//           width: 0,
+//           height: 3,
+//         },
+//       },
+//     }),
+//   },
+
+//   greetingContainer: {
+//     marginTop: 27,
+//     paddingHorizontal: 2,
+//   },
+
+//   greeting: {
+//     color: "#FFFFFF",
+
+//     fontSize:
+//       width < 360 ? 23 : 26,
+
+//     fontWeight: "700",
+
+//     letterSpacing: -0.3,
+//   },
+
+//   greetingSub: {
+//     color: "#DCEFFA",
+
+//     fontSize:
+//       width < 360 ? 12.5 : 14,
+
+//     lineHeight: 20,
+
+//     marginTop: 5,
+
+//     maxWidth: 360,
+//   },
+
+//   regionRow: {
+//     minHeight: 61,
+
+//     flexDirection: "row",
+//     alignItems: "center",
+
+//     marginTop: 21,
+
+//     paddingHorizontal: 12,
+//     paddingVertical: 9,
+
+//     borderRadius: 17,
+
+//     backgroundColor:
+//       "rgba(255,255,255,0.12)",
+
+//     borderWidth: 1,
+//     borderColor:
+//       "rgba(255,255,255,0.20)",
+//   },
+
+//   locationIconContainer: {
+//     width: 38,
+//     height: 38,
+
+//     borderRadius: 12,
+
+//     alignItems: "center",
+//     justifyContent: "center",
+
+//     backgroundColor:
+//       "rgba(103,212,255,0.22)",
+
+//     marginRight: 10,
+//   },
+
+//   regionTextContainer: {
+//     flex: 1,
+//     minWidth: 0,
+//   },
+
+//   regionLabel: {
+//     color: "#9EDFFF",
+
+//     fontSize: 9,
+
+//     fontWeight: "700",
+
+//     letterSpacing: 1,
+//   },
+
+//   regionText: {
+//     color: "#FFFFFF",
+
+//     fontSize: 14.5,
+
+//     fontWeight: "700",
+
+//     marginTop: 2,
+//   },
+
+//   refreshButton: {
+//     width: 34,
+//     height: 34,
+
+//     borderRadius: 11,
+
+//     alignItems: "center",
+//     justifyContent: "center",
+
+//     backgroundColor:
+//       "rgba(255,255,255,0.10)",
+
+//     marginLeft: 8,
+//   },
+
+//   bottomLine: {
+//     position: "absolute",
+
+//     left: 20,
+//     right: 20,
+//     bottom: 0,
+
+//     height: 2,
+
+//     borderRadius: 2,
+
+//     backgroundColor:
+//       "rgba(103,212,255,0.65)",
+//   },
+// });
+
+
+
+
+```jsx
 import React, { useEffect, useRef, useState } from "react";
+
 import {
   View,
   Text,
@@ -10,39 +770,72 @@ import {
   Dimensions,
   ActivityIndicator,
 } from "react-native";
+
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
 
+const isSmall = width < 360;
+const isLarge = width >= 430;
+
 export default function HomeHeader({ navigation }) {
   const insets = useSafeAreaInsets();
 
-  const [locationName, setLocationName] = useState(
-    "Detecting location..."
-  );
+  const [locationName, setLocationName] =
+    useState("Detecting location...");
 
-  const [locationLoading, setLocationLoading] = useState(true);
+  const [locationLoading, setLocationLoading] =
+    useState(true);
 
-  const [locationError, setLocationError] = useState(false);
+  const [locationError, setLocationError] =
+    useState(false);
 
-  // Animations
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(18)).current;
-  const scaleAnim = useRef(new Animated.Value(0.96)).current;
+  // =========================================
+  // ANIMATIONS
+  // =========================================
 
-  const menuRotate = useRef(new Animated.Value(0)).current;
-  const regionScale = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(
+    new Animated.Value(0)
+  ).current;
+
+  const slideAnim = useRef(
+    new Animated.Value(24)
+  ).current;
+
+  const scaleAnim = useRef(
+    new Animated.Value(0.97)
+  ).current;
+
+  const menuScale = useRef(
+    new Animated.Value(1)
+  ).current;
+
+  const profileScale = useRef(
+    new Animated.Value(1)
+  ).current;
+
+  const locationScale = useRef(
+    new Animated.Value(1)
+  ).current;
+
+  const refreshRotate = useRef(
+    new Animated.Value(0)
+  ).current;
+
+  // =========================================
+  // INITIAL LOAD
+  // =========================================
 
   useEffect(() => {
     startEntranceAnimation();
     fetchCurrentLocation();
   }, []);
 
-  // ---------------------------------------
-  // HEADER ENTRANCE ANIMATION
-  // ---------------------------------------
+  // =========================================
+  // ENTRANCE
+  // =========================================
 
   const startEntranceAnimation = () => {
     Animated.parallel([
@@ -52,31 +845,31 @@ export default function HomeHeader({ navigation }) {
         useNativeDriver: true,
       }),
 
-      Animated.timing(slideAnim, {
+      Animated.spring(slideAnim, {
         toValue: 0,
-        duration: 650,
+        friction: 8,
+        tension: 50,
         useNativeDriver: true,
       }),
 
       Animated.spring(scaleAnim, {
         toValue: 1,
         friction: 7,
-        tension: 45,
+        tension: 50,
         useNativeDriver: true,
       }),
     ]).start();
   };
 
-  // ---------------------------------------
-  // AUTOMATIC LOCATION
-  // ---------------------------------------
+  // =========================================
+  // LOCATION
+  // =========================================
 
   const fetchCurrentLocation = async () => {
     try {
       setLocationLoading(true);
       setLocationError(false);
 
-      // Ask user for permission
       const { status } =
         await Location.requestForegroundPermissionsAsync();
 
@@ -87,7 +880,6 @@ export default function HomeHeader({ navigation }) {
         return;
       }
 
-      // Get current GPS position
       const position =
         await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
@@ -96,7 +888,6 @@ export default function HomeHeader({ navigation }) {
       const { latitude, longitude } =
         position.coords;
 
-      // Convert coordinates into readable address
       const addresses =
         await Location.reverseGeocodeAsync({
           latitude,
@@ -122,7 +913,6 @@ export default function HomeHeader({ navigation }) {
       const country =
         address.country;
 
-      // Prefer city + state
       if (city && region) {
         setLocationName(`${city}, ${region}`);
       } else if (city) {
@@ -135,10 +925,7 @@ export default function HomeHeader({ navigation }) {
         setLocationName("Current location");
       }
     } catch (error) {
-      console.log(
-        "Location error:",
-        error
-      );
+      console.log("Location error:", error);
 
       setLocationError(true);
       setLocationName("Location unavailable");
@@ -147,21 +934,22 @@ export default function HomeHeader({ navigation }) {
     }
   };
 
-  // ---------------------------------------
+  // =========================================
   // MENU
-  // ---------------------------------------
+  // =========================================
 
   const animateMenu = () => {
     Animated.sequence([
-      Animated.timing(menuRotate, {
-        toValue: 1,
-        duration: 120,
+      Animated.timing(menuScale, {
+        toValue: 0.88,
+        duration: 80,
         useNativeDriver: true,
       }),
 
-      Animated.timing(menuRotate, {
-        toValue: 0,
-        duration: 180,
+      Animated.spring(menuScale, {
+        toValue: 1,
+        friction: 5,
+        tension: 100,
         useNativeDriver: true,
       }),
     ]).start();
@@ -171,19 +959,19 @@ export default function HomeHeader({ navigation }) {
     }
   };
 
-  // ---------------------------------------
-  // REGION PRESS
-  // ---------------------------------------
+  // =========================================
+  // PROFILE
+  // =========================================
 
-  const animateRegion = () => {
+  const openProfile = () => {
     Animated.sequence([
-      Animated.timing(regionScale, {
-        toValue: 0.96,
-        duration: 90,
+      Animated.timing(profileScale, {
+        toValue: 0.9,
+        duration: 80,
         useNativeDriver: true,
       }),
 
-      Animated.spring(regionScale, {
+      Animated.spring(profileScale, {
         toValue: 1,
         friction: 5,
         tension: 100,
@@ -191,15 +979,57 @@ export default function HomeHeader({ navigation }) {
       }),
     ]).start();
 
-    // Refresh location when user taps
+    navigation?.navigate?.("Profile");
+  };
+
+  // =========================================
+  // LOCATION PRESS
+  // =========================================
+
+  const animateLocation = () => {
+    Animated.sequence([
+      Animated.timing(locationScale, {
+        toValue: 0.97,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+
+      Animated.spring(locationScale, {
+        toValue: 1,
+        friction: 5,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     fetchCurrentLocation();
   };
 
-  const menuRotation =
-    menuRotate.interpolate({
-      inputRange: [0, 1],
-      outputRange: ["0deg", "-8deg"],
+  // =========================================
+  // REFRESH
+  // =========================================
+
+  const refreshLocation = () => {
+    Animated.timing(refreshRotate, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start(() => {
+      refreshRotate.setValue(0);
     });
+
+    fetchCurrentLocation();
+  };
+
+  const refreshRotation =
+    refreshRotate.interpolate({
+      inputRange: [0, 1],
+      outputRange: ["0deg", "360deg"],
+    });
+
+  // =========================================
+  // UI
+  // =========================================
 
   return (
     <Animated.View
@@ -232,134 +1062,186 @@ export default function HomeHeader({ navigation }) {
         resizeMode="cover"
         imageStyle={styles.backgroundImage}
       >
-        {/* Overlay */}
+        {/* =================================
+            DARK OVERLAY
+        ================================= */}
+
         <View style={styles.overlay} />
 
-        {/* Glow */}
-        <View style={styles.glowOne} />
-        <View style={styles.glowTwo} />
+        {/* =================================
+            DECORATIVE GLOWS
+        ================================= */}
+
+        <View style={styles.glowTop} />
+        <View style={styles.glowBottom} />
+
+        <View style={styles.circleOne} />
+        <View style={styles.circleTwo} />
+
+        {/* =================================
+            HEADER CONTENT
+        ================================= */}
 
         <View style={styles.headerContent}>
-          {/* ================================= */}
-          {/* TOP BAR */}
-          {/* ================================= */}
+          {/* =================================
+              TOP BAR
+          ================================= */}
 
-          <View style={styles.topRow}>
+          <View style={styles.topBar}>
             {/* MENU */}
+
             <TouchableOpacity
-              activeOpacity={0.75}
-              style={styles.menuButton}
+              activeOpacity={0.8}
+              style={styles.controlButton}
               onPress={animateMenu}
             >
               <Animated.View
                 style={{
                   transform: [
                     {
-                      rotate: menuRotation,
+                      scale: menuScale,
                     },
                   ],
                 }}
               >
                 <Ionicons
-                  name="menu-outline"
-                  size={28}
+                  name="menu"
+                  size={23}
                   color="#FFFFFF"
                 />
               </Animated.View>
             </TouchableOpacity>
 
-            {/* BRAND */}
-            <View style={styles.brandContainer}>
-              <View style={styles.logoShadow}>
-                <View style={styles.logo}>
+            {/* =================================
+                CENTER BRAND
+            ================================= */}
+
+            <View style={styles.brandArea}>
+              <View style={styles.brandLogo}>
+                <View style={styles.logoInner}>
                   <Ionicons
-                    name="navigate"
-                    size={25}
+                    name="shield-checkmark"
+                    size={21}
                     color="#FFFFFF"
                   />
                 </View>
+
+                <View style={styles.logoStatus}>
+                  <View style={styles.logoStatusDot} />
+                </View>
               </View>
 
-              <View
-                style={styles.brandTextContainer}
-              >
+              <View style={styles.brandDetails}>
                 <Text
                   style={styles.brandName}
                   numberOfLines={1}
                 >
-                  NER Connect
+                  Raksha
+                  <Text style={styles.brandHindi}>
+                    सेतू
+                  </Text>
                 </Text>
 
-                <View style={styles.taglineRow}>
-                  <View style={styles.taglineDot} />
+                <View style={styles.brandMeta}>
+                  <Text style={styles.brandMetaText}>
+                    SAFETY NETWORK
+                  </Text>
 
-                  <Text
-                    style={styles.brandTagline}
-                    numberOfLines={1}
-                  >
-                    Smarter Logistics. Safer Tomorrow.
+                  <View style={styles.metaDot} />
+
+                  <Text style={styles.brandMetaOnline}>
+                    ONLINE
                   </Text>
                 </View>
               </View>
             </View>
 
             {/* PROFILE */}
+
             <TouchableOpacity
-              activeOpacity={0.75}
-              style={styles.profileButton}
-              onPress={() =>
-                navigation?.navigate?.(
-                  "Profile"
-                )
-              }
+              activeOpacity={0.8}
+              style={[
+                styles.controlButton,
+                styles.profileButton,
+              ]}
+              onPress={openProfile}
             >
-              <Ionicons
-                name="person-outline"
-                size={21}
-                color="#FFFFFF"
-              />
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      scale: profileScale,
+                    },
+                  ],
+                }}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+              </Animated.View>
             </TouchableOpacity>
           </View>
 
-          {/* ================================= */}
-          {/* GREETING */}
-          {/* ================================= */}
+          {/* =================================
+              DIVIDER
+          ================================= */}
+
+          <View style={styles.headerDivider}>
+            <View style={styles.dividerLine} />
+
+            <View style={styles.dividerBadge}>
+              <View style={styles.liveDot} />
+
+              <Text style={styles.dividerText}>
+                LIVE
+              </Text>
+            </View>
+
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* =================================
+              GREETING
+          ================================= */}
 
           <View style={styles.greetingContainer}>
+            <Text style={styles.smallGreeting}>
+              GOOD MORNING
+            </Text>
+
             <Text style={styles.greeting}>
-              Good Morning,
+              Stay safe. Stay connected.
             </Text>
 
             <Text style={styles.greetingSub}>
-              Here's the latest update on NER
-              logistics & accessibility.
+              Your intelligent safety network is ready
+              to assist you.
             </Text>
           </View>
 
-          {/* ================================= */}
-          {/* AUTOMATIC LOCATION */}
-          {/* ================================= */}
+          {/* =================================
+              LOCATION
+          ================================= */}
 
           <Animated.View
             style={{
               transform: [
                 {
-                  scale: regionScale,
+                  scale: locationScale,
                 },
               ],
             }}
           >
             <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.regionRow}
-              onPress={animateRegion}
+              activeOpacity={0.88}
+              style={styles.locationCard}
+              onPress={animateLocation}
             >
               {/* Location icon */}
-              <View
-                style={
-                  styles.locationIconContainer
-                }
-              >
+
+              <View style={styles.locationIcon}>
                 {locationLoading ? (
                   <ActivityIndicator
                     size="small"
@@ -372,24 +1254,21 @@ export default function HomeHeader({ navigation }) {
                         ? "location-outline"
                         : "location"
                     }
-                    size={18}
+                    size={19}
                     color="#FFFFFF"
                   />
                 )}
               </View>
 
-              {/* Location text */}
-              <View
-                style={styles.regionTextContainer}
-              >
-                <Text
-                  style={styles.regionLabel}
-                >
-                  CURRENT LOCATION
+              {/* Location information */}
+
+              <View style={styles.locationInfo}>
+                <Text style={styles.locationLabel}>
+                  YOUR CURRENT LOCATION
                 </Text>
 
                 <Text
-                  style={styles.regionText}
+                  style={styles.locationName}
                   numberOfLines={1}
                 >
                   {locationName}
@@ -397,66 +1276,149 @@ export default function HomeHeader({ navigation }) {
               </View>
 
               {/* Refresh */}
+
               <TouchableOpacity
-                activeOpacity={0.7}
+                activeOpacity={0.75}
                 style={styles.refreshButton}
-                onPress={fetchCurrentLocation}
+                onPress={refreshLocation}
               >
-                <Ionicons
-                  name="refresh"
-                  size={17}
-                  color="#FFFFFF"
-                />
+                <Animated.View
+                  style={{
+                    transform: [
+                      {
+                        rotate: refreshRotation,
+                      },
+                    ],
+                  }}
+                >
+                  <Ionicons
+                    name="refresh-outline"
+                    size={18}
+                    color="#DFF5FF"
+                  />
+                </Animated.View>
               </TouchableOpacity>
             </TouchableOpacity>
           </Animated.View>
+
+          {/* =================================
+              SAFETY STATUS
+          ================================= */}
+
+          <View style={styles.statusRow}>
+            <View style={styles.statusLeft}>
+              <View style={styles.statusGreenDot} />
+
+              <Text style={styles.statusText}>
+                SAFETY SYSTEM ACTIVE
+              </Text>
+            </View>
+
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={15}
+              color="#8EE6B8"
+            />
+          </View>
         </View>
 
-        {/* Bottom line */}
-        <View style={styles.bottomLine} />
+        {/* =================================
+            BOTTOM ACCENT
+        ================================= */}
+
+        <View style={styles.bottomAccent}>
+          <View style={styles.accentBlue} />
+          <View style={styles.accentOrange} />
+        </View>
       </ImageBackground>
     </Animated.View>
   );
 }
 
+// =====================================================
+// STYLES
+// =====================================================
+
 const styles = StyleSheet.create({
+  // =========================================
+  // ROOT
+  // =========================================
+
   wrapper: {
     width: "100%",
-    backgroundColor: "#07558D",
+    backgroundColor: "#061A2A",
   },
 
   headerBackground: {
     width: "100%",
-    minHeight: 295,
+    minHeight: isSmall ? 315 : 330,
+
     overflow: "hidden",
   },
 
   backgroundImage: {
-    opacity: 0.95,
+    opacity: 0.42,
   },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
+
     backgroundColor:
-      "rgba(3, 48, 84, 0.72)",
+      "rgba(3, 25, 43, 0.90)",
   },
 
-  glowOne: {
+  // =========================================
+  // BACKGROUND EFFECTS
+  // =========================================
+
+  glowTop: {
     position: "absolute",
 
-    width: 190,
-    height: 190,
+    width: isLarge ? 330 : 270,
+    height: isLarge ? 330 : 270,
 
-    borderRadius: 95,
+    borderRadius: 200,
 
     backgroundColor:
-      "rgba(52, 191, 255, 0.15)",
+      "rgba(14, 165, 233, 0.12)",
 
-    top: -80,
-    right: -60,
+    top: -190,
+    right: -120,
   },
 
-  glowTwo: {
+  glowBottom: {
+    position: "absolute",
+
+    width: 240,
+    height: 240,
+
+    borderRadius: 150,
+
+    backgroundColor:
+      "rgba(249, 115, 22, 0.065)",
+
+    bottom: -170,
+    left: -130,
+  },
+
+  circleOne: {
+    position: "absolute",
+
+    width: 210,
+    height: 210,
+
+    borderRadius: 105,
+
+    borderWidth: 1,
+
+    borderColor:
+      "rgba(120, 211, 255, 0.045)",
+
+    top: 25,
+    right: -130,
+  },
+
+  circleTwo: {
     position: "absolute",
 
     width: 150,
@@ -464,41 +1426,54 @@ const styles = StyleSheet.create({
 
     borderRadius: 75,
 
-    backgroundColor:
-      "rgba(0, 157, 255, 0.10)",
+    borderWidth: 1,
+
+    borderColor:
+      "rgba(249, 115, 22, 0.05)",
 
     bottom: -70,
-    left: -50,
+    left: -60,
   },
+
+  // =========================================
+  // HEADER CONTENT
+  // =========================================
 
   headerContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: isSmall ? 15 : 19,
+
+    paddingBottom: 22,
   },
 
-  topRow: {
+  // =========================================
+  // TOP BAR
+  // =========================================
+
+  topBar: {
+    minHeight: 57,
+
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 58,
+
+    justifyContent: "space-between",
   },
 
-  menuButton: {
-    width: 46,
-    height: 46,
+  controlButton: {
+    width: 43,
+    height: 43,
 
-    borderRadius: 15,
+    borderRadius: 14,
 
     alignItems: "center",
     justifyContent: "center",
 
     backgroundColor:
-      "rgba(255,255,255,0.12)",
+      "rgba(255,255,255,0.075)",
 
     borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.20)",
 
-    marginRight: 10,
+    borderColor:
+      "rgba(255,255,255,0.13)",
 
     ...Platform.select({
       android: {
@@ -507,7 +1482,7 @@ const styles = StyleSheet.create({
 
       ios: {
         shadowColor: "#000",
-        shadowOpacity: 0.15,
+        shadowOpacity: 0.16,
         shadowRadius: 6,
         shadowOffset: {
           width: 0,
@@ -517,44 +1492,90 @@ const styles = StyleSheet.create({
     }),
   },
 
-  brandContainer: {
+  profileButton: {
+    borderRadius: 22,
+
+    backgroundColor:
+      "rgba(8, 119, 184, 0.72)",
+
+    borderColor:
+      "rgba(112, 216, 255, 0.35)",
+  },
+
+  // =========================================
+  // BRAND
+  // =========================================
+
+  brandArea: {
     flex: 1,
-    minWidth: 0,
 
     flexDirection: "row",
     alignItems: "center",
+
+    marginHorizontal: 10,
   },
 
-  logoShadow: {
-    width: 50,
-    height: 50,
+  brandLogo: {
+    width: 44,
+    height: 44,
 
-    borderRadius: 25,
-
-    padding: 2,
+    borderRadius: 14,
 
     backgroundColor:
-      "rgba(103,212,255,0.40)",
+      "rgba(10, 122, 184, 0.30)",
+
+    borderWidth: 1,
+
+    borderColor:
+      "rgba(115, 218, 255, 0.30)",
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    position: "relative",
 
     marginRight: 9,
   },
 
-  logo: {
-    flex: 1,
+  logoInner: {
+    width: 35,
+    height: 35,
 
-    borderRadius: 23,
+    borderRadius: 11,
 
     alignItems: "center",
     justifyContent: "center",
 
     backgroundColor: "#0877B8",
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.35)",
   },
 
-  brandTextContainer: {
+  logoStatus: {
+    position: "absolute",
+
+    right: -2,
+    bottom: -2,
+
+    width: 13,
+    height: 13,
+
+    borderRadius: 7,
+
+    backgroundColor: "#061A2A",
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  logoStatusDot: {
+    width: 7,
+    height: 7,
+
+    borderRadius: 4,
+
+    backgroundColor: "#22C55E",
+  },
+
+  brandDetails: {
     flex: 1,
     minWidth: 0,
   },
@@ -562,69 +1583,203 @@ const styles = StyleSheet.create({
   brandName: {
     color: "#FFFFFF",
 
-    fontSize: width < 360 ? 21 : 24,
+    fontSize: isSmall
+      ? 20
+      : isLarge
+      ? 23
+      : 21.5,
 
-    fontWeight: "800",
+    fontWeight: "900",
 
-    letterSpacing: 0.2,
+    letterSpacing: -0.4,
   },
 
-  taglineRow: {
+  brandHindi: {
+    color: "#F97316",
+    fontWeight: "900",
+  },
+
+  brandMeta: {
     flexDirection: "row",
     alignItems: "center",
 
     marginTop: 2,
   },
 
-  taglineDot: {
+  brandMetaText: {
+    color: "#91AFC2",
+
+    fontSize: 7.5,
+
+    fontWeight: "800",
+
+    letterSpacing: 0.8,
+  },
+
+  metaDot: {
+    width: 3,
+    height: 3,
+
+    borderRadius: 2,
+
+    backgroundColor: "#647B8D",
+
+    marginHorizontal: 5,
+  },
+
+  brandMetaOnline: {
+    color: "#6FE1A3",
+
+    fontSize: 7.5,
+
+    fontWeight: "900",
+
+    letterSpacing: 0.7,
+  },
+
+  // =========================================
+  // HEADER DIVIDER
+  // =========================================
+
+  headerDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    marginTop: 8,
+  },
+
+  dividerLine: {
+    flex: 1,
+
+    height: 1,
+
+    backgroundColor:
+      "rgba(255,255,255,0.075)",
+  },
+
+  dividerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    marginHorizontal: 9,
+
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+
+    borderRadius: 20,
+
+    backgroundColor:
+      "rgba(255,255,255,0.045)",
+
+    borderWidth: 1,
+
+    borderColor:
+      "rgba(255,255,255,0.07)",
+  },
+
+  liveDot: {
     width: 5,
     height: 5,
 
     borderRadius: 3,
 
-    backgroundColor: "#67D4FF",
+    backgroundColor: "#22C55E",
 
     marginRight: 5,
   },
 
-  brandTagline: {
-    flex: 1,
+  dividerText: {
+    color: "#9EB4C5",
 
-    color: "#D8F3FF",
+    fontSize: 7,
 
-    fontSize:
-      width < 360 ? 9 : 10.5,
+    fontWeight: "900",
 
-    fontWeight: "500",
+    letterSpacing: 0.8,
   },
 
-  profileButton: {
-    width: 46,
-    height: 46,
+  // =========================================
+  // GREETING
+  // =========================================
 
-    borderRadius: 23,
+  greetingContainer: {
+    marginTop: 24,
 
+    paddingHorizontal: 2,
+  },
+
+  smallGreeting: {
+    color: "#F97316",
+
+    fontSize: 9,
+
+    fontWeight: "900",
+
+    letterSpacing: 1.6,
+
+    marginBottom: 5,
+  },
+
+  greeting: {
+    color: "#FFFFFF",
+
+    fontSize: isSmall
+      ? 24
+      : isLarge
+      ? 29
+      : 26,
+
+    fontWeight: "900",
+
+    letterSpacing: -0.7,
+  },
+
+  greetingSub: {
+    color: "#AFC4D3",
+
+    fontSize: isSmall ? 11.5 : 12.5,
+
+    lineHeight: 18,
+
+    marginTop: 5,
+
+    maxWidth: 350,
+  },
+
+  // =========================================
+  // LOCATION
+  // =========================================
+
+  locationCard: {
+    minHeight: 67,
+
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+
+    marginTop: 19,
+
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+
+    borderRadius: 17,
 
     backgroundColor:
-      "rgba(7,105,163,0.85)",
+      "rgba(255,255,255,0.075)",
 
-    borderWidth: 1.5,
+    borderWidth: 1,
+
     borderColor:
-      "rgba(255,255,255,0.75)",
-
-    marginLeft: 8,
+      "rgba(255,255,255,0.13)",
 
     ...Platform.select({
       android: {
-        elevation: 4,
+        elevation: 2,
       },
 
       ios: {
         shadowColor: "#000",
-        shadowOpacity: 0.18,
-        shadowRadius: 6,
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
         shadowOffset: {
           width: 0,
           height: 3,
@@ -633,59 +1788,55 @@ const styles = StyleSheet.create({
     }),
   },
 
-  greetingContainer: {
-    marginTop: 27,
-    paddingHorizontal: 2,
-  },
+  locationIcon: {
+    width: 42,
+    height: 42,
 
-  greeting: {
-    color: "#FFFFFF",
+    borderRadius: 13,
 
-    fontSize:
-      width < 360 ? 23 : 26,
-
-    fontWeight: "700",
-
-    letterSpacing: -0.3,
-  },
-
-  greetingSub: {
-    color: "#DCEFFA",
-
-    fontSize:
-      width < 360 ? 12.5 : 14,
-
-    lineHeight: 20,
-
-    marginTop: 5,
-
-    maxWidth: 360,
-  },
-
-  regionRow: {
-    minHeight: 61,
-
-    flexDirection: "row",
     alignItems: "center",
-
-    marginTop: 21,
-
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-
-    borderRadius: 17,
+    justifyContent: "center",
 
     backgroundColor:
-      "rgba(255,255,255,0.12)",
+      "rgba(8,119,184,0.55)",
 
     borderWidth: 1,
+
     borderColor:
-      "rgba(255,255,255,0.20)",
+      "rgba(105,215,255,0.25)",
+
+    marginRight: 10,
   },
 
-  locationIconContainer: {
-    width: 38,
-    height: 38,
+  locationInfo: {
+    flex: 1,
+
+    minWidth: 0,
+  },
+
+  locationLabel: {
+    color: "#82B9D5",
+
+    fontSize: 7.5,
+
+    fontWeight: "900",
+
+    letterSpacing: 1.1,
+  },
+
+  locationName: {
+    color: "#FFFFFF",
+
+    fontSize: isSmall ? 13 : 14,
+
+    fontWeight: "800",
+
+    marginTop: 3,
+  },
+
+  refreshButton: {
+    width: 36,
+    height: 36,
 
     borderRadius: 12,
 
@@ -693,63 +1844,88 @@ const styles = StyleSheet.create({
     justifyContent: "center",
 
     backgroundColor:
-      "rgba(103,212,255,0.22)",
+      "rgba(255,255,255,0.065)",
 
-    marginRight: 10,
-  },
+    borderWidth: 1,
 
-  regionTextContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  regionLabel: {
-    color: "#9EDFFF",
-
-    fontSize: 9,
-
-    fontWeight: "700",
-
-    letterSpacing: 1,
-  },
-
-  regionText: {
-    color: "#FFFFFF",
-
-    fontSize: 14.5,
-
-    fontWeight: "700",
-
-    marginTop: 2,
-  },
-
-  refreshButton: {
-    width: 34,
-    height: 34,
-
-    borderRadius: 11,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor:
-      "rgba(255,255,255,0.10)",
+    borderColor:
+      "rgba(255,255,255,0.09)",
 
     marginLeft: 8,
   },
 
-  bottomLine: {
+  // =========================================
+  // SAFETY STATUS
+  // =========================================
+
+  statusRow: {
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    justifyContent: "space-between",
+
+    marginTop: 12,
+
+    paddingHorizontal: 3,
+  },
+
+  statusLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  statusGreenDot: {
+    width: 6,
+    height: 6,
+
+    borderRadius: 3,
+
+    backgroundColor: "#22C55E",
+
+    marginRight: 6,
+  },
+
+  statusText: {
+    color: "#9AB0BF",
+
+    fontSize: 8,
+
+    fontWeight: "800",
+
+    letterSpacing: 0.8,
+  },
+
+  // =========================================
+  // BOTTOM ACCENT
+  // =========================================
+
+  bottomAccent: {
     position: "absolute",
 
-    left: 20,
-    right: 20,
+    left: 0,
+    right: 0,
     bottom: 0,
 
     height: 2,
 
-    borderRadius: 2,
+    flexDirection: "row",
+  },
+
+  accentBlue: {
+    flex: 1,
 
     backgroundColor:
-      "rgba(103,212,255,0.65)",
+      "rgba(56,189,248,0.72)",
+  },
+
+  accentOrange: {
+    width: "28%",
+
+    backgroundColor:
+      "rgba(249,115,22,0.90)",
   },
 });
+```
+
+Is version me **old `navigate` icon completely remove** hai aur uski jagah Rakshaसेतू ke security concept ke according **shield-checkmark branding** use kiya hai. Header ab login screen ke dark navy/orange aesthetic ke saath visually match karega.

@@ -710,14 +710,14 @@ export default function SafetyEmergencyScreen() {
       const name =
         user?.name ||
         user?.fullName ||
-        "NER Connect User";
+        "Rakshaसेतू User";
 
       const mapUrl =
         `https://www.google.com/maps?q=` +
         `${coords.latitude},${coords.longitude}`;
 
       const message =
-        `🚨 NER CONNECT EMERGENCY 🚨\n\n` +
+        `🚨 Rakshaसेतू EMERGENCY 🚨\n\n` +
         `Name: ${name}\n\n` +
         `I need immediate emergency assistance.\n\n` +
         `📍 Current Location:\n` +
@@ -725,7 +725,7 @@ export default function SafetyEmergencyScreen() {
         `🚗 Speed: ${latestSpeed.current.toFixed(
           0
         )} km/h\n\n` +
-        `This SOS was generated from the NER Connect Safety System.`;
+        `This SOS was generated from the Rakshaसेतू Safety System.`;
 
       const available =
         await SMS.isAvailableAsync();
@@ -873,7 +873,7 @@ export default function SafetyEmergencyScreen() {
           <View style={styles.header}>
             <View>
               <Text style={styles.eyebrow}>
-                NER CONNECT
+                RAKSHAसेतू
               </Text>
 
               <Text style={styles.title}>
@@ -1498,7 +1498,7 @@ export default function SafetyEmergencyScreen() {
             />
 
             <Text style={styles.footerText}>
-              NER Connect Safety System
+              Rakshaसेतू Safety System
             </Text>
           </View>
         </Animated.View>

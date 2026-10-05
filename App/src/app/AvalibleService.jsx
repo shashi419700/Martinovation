@@ -1,614 +1,330 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  SafeAreaView,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   ScrollView,
   StatusBar,
-  StyleSheet,
-  Text,
-  View,
+  Animated,
+  Alert,
+  Dimensions,
+  Platform,
 } from "react-native";
-import * as Location from "expo-location";
-import MapView, {
-  Callout,
-  Marker,
-  Polyline,
-  PROVIDER_GOOGLE,
-} from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 
-/*
-===========================================================
- TRUCK GPS TRACKING PROTOTYPE
- ----------------------------------------------------------
- Prototype flow:
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
- TRUCK DRIVER
-      ↓
- GPS / Demo Location
-      ↓
- Truck moves on route
-      ↓
- Transport Owner / Place
-      ↓
- Live truck location
+const IS_SMALL_DEVICE = SCREEN_WIDTH < 360;
+const IS_TABLET = SCREEN_WIDTH >= 600;
 
- Example route:
- Guwahati, Assam
-      ↓
- Nongpoh
-      ↓
- Byrnihat
-      ↓
- Umiam
-      ↓
- Shillong, Meghalaya
+const DEVICE_NAME = "Rakshaसेतू • This Device";
 
- If phone/GPS is unavailable:
- Demo/Fallback tracking continues.
-===========================================================
-*/
+const COLORS = {
+  primary: "#1769AA",
+  primaryDark: "#0D47A1",
+  cyan: "#00A8E8",
+  green: "#16A34A",
+  orange: "#F59E0B",
+  red: "#DC2626",
+  bg: "#F5F8FC",
+  card: "#FFFFFF",
+  text: "#0F172A",
+  muted: "#64748B",
+  border: "#E2E8F0",
+};
 
-// ---------------------------------------------------------
-// DEMO ROUTE
-// ---------------------------------------------------------
-
-const ROUTE = [
+const initialPeers = [
   {
-    latitude: 26.1445,
-    longitude: 91.7362,
-    name: "Guwahati",
-    state: "Assam",
+    id: "peer_001",
+    name: "Rakshaसेतू User",
+    distance: "8 m",
+    signal: 92,
+    status: "CONNECTED",
   },
   {
-    latitude: 26.0489,
-    longitude: 91.8826,
-    name: "Jorabat",
-    state: "Assam",
+    id: "peer_002",
+    name: "Emergency Relay",
+    distance: "21 m",
+    signal: 74,
+    status: "CONNECTED",
   },
   {
-    latitude: 25.8759,
-    longitude: 91.8737,
-    name: "Nongpoh",
-    state: "Meghalaya",
-  },
-  {
-    latitude: 25.7762,
-    longitude: 91.8970,
-    name: "Byrnihat",
-    state: "Meghalaya",
-  },
-  {
-    latitude: 25.6720,
-    longitude: 91.9060,
-    name: "Umiam",
-    state: "Meghalaya",
-  },
-  {
-    latitude: 25.5788,
-    longitude: 91.8933,
-    name: "Shillong",
-    state: "Meghalaya",
+    id: "peer_003",
+    name: "Nearby Device",
+    distance: "36 m",
+    signal: 58,
+    status: "DISCOVERED",
   },
 ];
 
-// ---------------------------------------------------------
-// VEHICLES
-// ---------------------------------------------------------
+const createPacket = () => ({
+  id: `SOS-${Date.now().toString(36).toUpperCase()}`,
+  type: "EMERGENCY",
+  ttl: 5,
+  createdAt: new Date(),
+  status: "STORED",
+});
 
-const TRUCK = {
-  id: "TRK-1024",
-  number: "AS 01 AB 4521",
-  driver: "Truck Driver",
-  cargo: "Transport Goods",
-};
+export default function P2PRelayScreen({ navigation }) {
+  const [isDiscovering, setIsDiscovering] = useState(true);
+  const [isConnected, setIsConnected] = useState(true);
+  const [peers, setPeers] = useState(initialPeers);
+  const [packets, setPackets] = useState([]);
+  const [relayCount, setRelayCount] = useState(0);
+  const [forwardedCount, setForwardedCount] = useState(0);
+  const [internetAvailable, setInternetAvailable] = useState(false);
 
-const DESTINATION = {
-  latitude: 25.5788,
-  longitude: 91.8933,
-  name: "Shillong Transport Hub",
-  state: "Meghalaya",
-};
-
-// ---------------------------------------------------------
-// HELPERS
-// ---------------------------------------------------------
-
-const toRad = (value) => (value * Math.PI) / 180;
-
-const distanceKm = (a, b) => {
-  if (!a || !b) return 0;
-
-  const R = 6371;
-
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLon = toRad(b.longitude - a.longitude);
-
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-
-  const x =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.sin(dLon / 2) *
-      Math.sin(dLon / 2) *
-      Math.cos(lat1) *
-      Math.cos(lat2);
-
-  const y = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-
-  return R * y;
-};
-
-const calculateBearing = (a, b) => {
-  if (!a || !b) return 0;
-
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-
-  const dLon = toRad(b.longitude - a.longitude);
-
-  const y = Math.sin(dLon) * Math.cos(lat2);
-
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) *
-      Math.cos(lat2) *
-      Math.cos(dLon);
-
-  let bearing =
-    (Math.atan2(y, x) * 180) / Math.PI;
-
-  bearing = (bearing + 360) % 360;
-
-  return bearing;
-};
-
-const directionFromBearing = (bearing) => {
-  const directions = [
-    "North",
-    "North-East",
-    "East",
-    "South-East",
-    "South",
-    "South-West",
-    "West",
-    "North-West",
-  ];
-
-  const index =
-    Math.round(bearing / 45) % 8;
-
-  return directions[index];
-};
-
-const formatCoordinate = (value) => {
-  if (value === null || value === undefined) {
-    return "--";
-  }
-
-  return Number(value).toFixed(5);
-};
-
-const formatDistance = (km) => {
-  if (km < 1) {
-    return `${Math.round(km * 1000)} m`;
-  }
-
-  return `${km.toFixed(1)} km`;
-};
-
-const getTotalRouteDistance = () => {
-  let total = 0;
-
-  for (let i = 0; i < ROUTE.length - 1; i++) {
-    total += distanceKm(
-      ROUTE[i],
-      ROUTE[i + 1]
-    );
-  }
-
-  return total;
-};
-
-const TOTAL_ROUTE_DISTANCE =
-  getTotalRouteDistance();
-
-// ---------------------------------------------------------
-// MAIN SCREEN
-// ---------------------------------------------------------
-
-export default function GPSTrackingScreen() {
-  const mapRef = useRef(null);
-
-  const [tracking, setTracking] = useState(false);
-  const [demoMode, setDemoMode] = useState(true);
-  const [phoneOffline, setPhoneOffline] =
-    useState(false);
-
-  const [loading, setLoading] = useState(false);
-
-  const [truckLocation, setTruckLocation] =
-    useState(ROUTE[0]);
-
-  const [selectedPlace, setSelectedPlace] =
-    useState(null);
-
-  const [speed, setSpeed] = useState(48);
-
-  const [accuracy, setAccuracy] =
-    useState(null);
-
-  const [routeIndex, setRouteIndex] =
-    useState(0);
-
-  const [lastUpdate, setLastUpdate] =
-    useState("Just now");
-
-  const [showRouteInfo, setShowRouteInfo] =
-    useState(true);
-
-  const locationSubscription =
-    useRef(null);
-
-  // -------------------------------------------------------
-  // INITIAL MAP
-  // -------------------------------------------------------
+  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.12,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulse]);
+
+  const connectedPeers = useMemo(
+    () => peers.filter((peer) => peer.status === "CONNECTED"),
+    [peers]
+  );
+
+  const discoverPeers = () => {
+    if (isDiscovering) return;
+
+    setIsDiscovering(true);
+
     setTimeout(() => {
-      fitRoute();
-    }, 600);
-
-    return () => {
-      if (locationSubscription.current) {
-        locationSubscription.current.remove();
-      }
-    };
-  }, []);
-
-  // -------------------------------------------------------
-  // FALLBACK TRUCK MOVEMENT
-  // -------------------------------------------------------
-
-  useEffect(() => {
-    if (!tracking) return;
-
-    /*
-      Demo mode:
-      Truck moves between predefined Assam/Meghalaya
-      route points.
-
-      This represents what the transport owner sees
-      when the actual truck device is unavailable.
-    */
-
-    if (!demoMode && !phoneOffline) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setRouteIndex((previousIndex) => {
-        let nextIndex =
-          previousIndex + 1;
-
-        if (nextIndex >= ROUTE.length) {
-          nextIndex = 0;
-        }
-
-        const nextPoint = ROUTE[nextIndex];
-
-        setTruckLocation(nextPoint);
-
-        const previousPoint =
-          ROUTE[previousIndex];
-
-        const bearing =
-          calculateBearing(
-            previousPoint,
-            nextPoint
-          );
-
-        // Slightly realistic demo speed
-        const nextSpeed =
-          42 + Math.round(Math.random() * 20);
-
-        setSpeed(nextSpeed);
-
-        setLastUpdate("Just now");
-
-        return nextIndex;
-      });
-    }, 3500);
-
-    return () => clearInterval(interval);
-  }, [tracking, demoMode, phoneOffline]);
-
-  // -------------------------------------------------------
-  // REAL GPS
-  // -------------------------------------------------------
-
-  const startRealGPS = async () => {
-    setLoading(true);
-
-    try {
-      const { status } =
-        await Location.requestForegroundPermissionsAsync();
-
-      if (status !== "granted") {
-        Alert.alert(
-          "Location Permission",
-          "Location permission allow karein."
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      const current =
-        await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-
-      const coords = {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-      };
-
-      setTruckLocation(coords);
-
-      setAccuracy(current.coords.accuracy);
-
-      setSpeed(
-        current.coords.speed &&
-          current.coords.speed > 0
-          ? Math.round(
-              current.coords.speed * 3.6
-            )
-          : 0
+      setPeers((current) =>
+        current.map((peer) => ({
+          ...peer,
+          status: "CONNECTED",
+        }))
       );
 
-      locationSubscription.current =
-        await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 3000,
-            distanceInterval: 5,
-          },
-          (location) => {
-            const coords = {
-              latitude:
-                location.coords.latitude,
-              longitude:
-                location.coords.longitude,
-            };
+      setIsDiscovering(false);
+      setIsConnected(true);
+    }, 1500);
+  };
 
-            setTruckLocation(coords);
-
-            setAccuracy(
-              location.coords.accuracy
-            );
-
-            if (
-              location.coords.speed &&
-              location.coords.speed > 0
-            ) {
-              setSpeed(
-                Math.round(
-                  location.coords.speed * 3.6
-                )
-              );
+  const connectPeer = (peerId) => {
+    setPeers((current) =>
+      current.map((peer) =>
+        peer.id === peerId
+          ? {
+              ...peer,
+              status: "CONNECTED",
             }
+          : peer
+      )
+    );
 
-            setLastUpdate("Just now");
-
-            if (mapRef.current) {
-              mapRef.current.animateToRegion(
-                {
-                  ...coords,
-                  latitudeDelta: 0.15,
-                  longitudeDelta: 0.15,
-                },
-                600
-              );
-            }
-          }
-        );
-    } catch (error) {
-      Alert.alert(
-        "GPS Error",
-        "Real GPS unavailable. Demo fallback start ho raha hai."
-      );
-
-      setDemoMode(true);
-    }
-
-    setLoading(false);
+    setIsConnected(true);
   };
 
-  // -------------------------------------------------------
-  // START
-  // -------------------------------------------------------
-
-  const startTracking = async () => {
-    setTracking(true);
-
-    if (!demoMode && !phoneOffline) {
-      await startRealGPS();
-    }
-  };
-
-  // -------------------------------------------------------
-  // STOP
-  // -------------------------------------------------------
-
-  const stopTracking = () => {
-    if (locationSubscription.current) {
-      locationSubscription.current.remove();
-      locationSubscription.current = null;
-    }
-
-    setTracking(false);
-  };
-
-  // -------------------------------------------------------
-  // OFFLINE SIMULATION
-  // -------------------------------------------------------
-
-  const togglePhoneOffline = () => {
-    const next = !phoneOffline;
-
-    setPhoneOffline(next);
-
-    /*
-      Phone offline:
-      Real GPS subscription stop.
-      Truck fallback simulation continues.
-
-      This prototype represents:
-      "Driver phone removed/offline but transport
-       owner still sees last/demo truck movement."
-    */
-
-    if (next) {
-      if (locationSubscription.current) {
-        locationSubscription.current.remove();
-        locationSubscription.current = null;
-      }
-
-      setDemoMode(true);
-
-      Alert.alert(
-        "Phone Offline",
-        "Driver phone offline. Fallback truck tracking active."
-      );
-    } else {
-      Alert.alert(
-        "Phone Online",
-        "Driver device connected again."
-      );
-    }
-  };
-
-  // -------------------------------------------------------
-  // FIT ROUTE
-  // -------------------------------------------------------
-
-  const fitRoute = () => {
-    if (!mapRef.current) return;
-
-    mapRef.current.fitToCoordinates(
-      ROUTE.map((item) => ({
-        latitude: item.latitude,
-        longitude: item.longitude,
-      })),
-      {
-        edgePadding: {
-          top: 100,
-          right: 50,
-          bottom: 250,
-          left: 50,
+  const showPeerDetails = (peer) => {
+    Alert.alert(
+      peer.name,
+      `Distance: ${peer.distance}\nSignal: ${peer.signal}%\nStatus: ${peer.status}`,
+      [
+        {
+          text: "Close",
+          style: "cancel",
         },
-        animated: true,
-      }
+        ...(peer.status === "DISCOVERED"
+          ? [
+              {
+                text: "Connect",
+                onPress: () => connectPeer(peer.id),
+              },
+            ]
+          : []),
+      ]
     );
   };
 
-  // -------------------------------------------------------
-  // FOCUS TRUCK
-  // -------------------------------------------------------
+  const sendEmergencyPacket = () => {
+    const packet = createPacket();
 
-  const focusTruck = () => {
-    if (!mapRef.current || !truckLocation) {
-      return;
-    }
+    setPackets((current) => [packet, ...current]);
+    setRelayCount((value) => value + 1);
 
-    mapRef.current.animateToRegion(
-      {
-        latitude: truckLocation.latitude,
-        longitude: truckLocation.longitude,
-        latitudeDelta: 0.12,
-        longitudeDelta: 0.12,
-      },
-      700
-    );
-  };
-
-  // -------------------------------------------------------
-  // CALCULATIONS
-  // -------------------------------------------------------
-
-  const destinationDistance =
-    distanceKm(
-      truckLocation,
-      DESTINATION
-    );
-
-  const bearing =
-    calculateBearing(
-      truckLocation,
-      DESTINATION
-    );
-
-  const direction =
-    directionFromBearing(bearing);
-
-  const etaMinutes =
-    speed > 0
-      ? Math.round(
-          (destinationDistance / speed) *
-            60
+    setTimeout(() => {
+      setPackets((current) =>
+        current.map((item) =>
+          item.id === packet.id
+            ? {
+                ...item,
+                status: "RELAYING",
+                ttl: item.ttl - 1,
+              }
+            : item
         )
-      : 0;
+      );
+    }, 1000);
 
-  const etaText =
-    etaMinutes > 60
-      ? `${Math.floor(
-          etaMinutes / 60
-        )}h ${etaMinutes % 60}m`
-      : `${etaMinutes} min`;
+    setTimeout(() => {
+      setPackets((current) =>
+        current.map((item) =>
+          item.id === packet.id
+            ? {
+                ...item,
+                status: "FORWARDED",
+                ttl: item.ttl - 1,
+              }
+            : item
+        )
+      );
 
-  // -------------------------------------------------------
-  // RENDER
-  // -------------------------------------------------------
+      setForwardedCount((value) => value + 1);
+    }, 2400);
+
+    setTimeout(() => {
+      setPackets((current) =>
+        current.map((item) =>
+          item.id === packet.id
+            ? {
+                ...item,
+                status: "DELIVERED",
+              }
+            : item
+        )
+      );
+    }, 4200);
+  };
+
+  const clearQueue = () => {
+    setPackets([]);
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "CONNECTED":
+      case "FORWARDED":
+      case "DELIVERED":
+        return COLORS.green;
+
+      case "RELAYING":
+        return COLORS.orange;
+
+      case "DISCOVERED":
+        return COLORS.primary;
+
+      default:
+        return COLORS.muted;
+    }
+  };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.container}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor="#FFFFFF"
+        backgroundColor={COLORS.bg}
       />
 
-      <View style={styles.container}>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* HEADER */}
         <View style={styles.header}>
-          <View style={styles.logo}>
+          <TouchableOpacity
+            style={styles.backButton}
+            activeOpacity={0.75}
+            onPress={() => navigation?.goBack?.()}
+          >
             <Ionicons
-              name="navigate"
+              name="arrow-back"
               size={22}
-              color="#1769E0"
+              color={COLORS.text}
             />
+          </TouchableOpacity>
+
+          <View style={styles.headerTitleBox}>
+            <Text
+              style={styles.title}
+              numberOfLines={1}
+            >
+              P2P Network
+            </Text>
+
+            <Text
+              style={styles.subtitle}
+              numberOfLines={1}
+            >
+              Rakshaसेतू Offline Relay
+            </Text>
           </View>
 
-          <View style={styles.headerText}>
-            <Text style={styles.title}>
-              Fleet GPS Tracking
-            </Text>
+          <TouchableOpacity
+            style={styles.networkIcon}
+            activeOpacity={0.75}
+            onPress={discoverPeers}
+          >
+            <Ionicons
+              name="git-network-outline"
+              size={22}
+              color={COLORS.primary}
+            />
+          </TouchableOpacity>
+        </View>
 
-            <Text style={styles.subtitle}>
-              Truck • Driver • Transport Hub
-            </Text>
+        {/* NETWORK STATUS */}
+        <View style={styles.statusCard}>
+          <View style={styles.statusLeft}>
+            <Animated.View
+              style={[
+                styles.statusCircle,
+                {
+                  transform: [{ scale: pulse }],
+                },
+              ]}
+            >
+              <Ionicons
+                name="wifi"
+                size={24}
+                color="#FFFFFF"
+              />
+            </Animated.View>
+
+            <View style={styles.statusTextBox}>
+              <Text
+                style={styles.statusTitle}
+                numberOfLines={2}
+              >
+                {isDiscovering
+                  ? "Discovering nearby devices..."
+                  : "Nearby Network Active"}
+              </Text>
+
+              <Text style={styles.statusSubtitle}>
+                {connectedPeers.length} nearby peers connected
+              </Text>
+            </View>
           </View>
 
           <View
             style={[
               styles.liveBadge,
               {
-                backgroundColor: tracking
-                  ? "#E9F8F1"
-                  : "#F1F4F8",
+                backgroundColor: isConnected
+                  ? "#DCFCE7"
+                  : "#FEE2E2",
               },
             ]}
           >
@@ -616,9 +332,9 @@ export default function GPSTrackingScreen() {
               style={[
                 styles.liveDot,
                 {
-                  backgroundColor: tracking
-                    ? "#18B66A"
-                    : "#9AA6B4",
+                  backgroundColor: isConnected
+                    ? COLORS.green
+                    : COLORS.red,
                 },
               ]}
             />
@@ -627,1769 +343,1279 @@ export default function GPSTrackingScreen() {
               style={[
                 styles.liveText,
                 {
-                  color: tracking
-                    ? "#159A5B"
-                    : "#7A8797",
+                  color: isConnected
+                    ? COLORS.green
+                    : COLORS.red,
                 },
               ]}
             >
-              {tracking ? "LIVE" : "OFF"}
+              {isConnected ? "LIVE" : "OFFLINE"}
             </Text>
           </View>
         </View>
 
-        {/* MODE BAR */}
-        <View style={styles.modeBar}>
-          <Pressable
-            style={[
-              styles.modeButton,
-              demoMode &&
-                styles.modeButtonActive,
-            ]}
-            onPress={() => {
-              setDemoMode(true);
-            }}
-          >
-            <Ionicons
-              name="flask-outline"
-              size={16}
-              color={
-                demoMode
-                  ? "#1769E0"
-                  : "#8290A0"
-              }
-            />
+        {/* NETWORK VISUAL */}
+        <View style={styles.networkCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.headerTextBlock}>
+              <Text style={styles.sectionTitle}>
+                P2P Cluster
+              </Text>
 
-            <Text
-              style={[
-                styles.modeText,
-                demoMode &&
-                  styles.modeTextActive,
-              ]}
-            >
-              Demo
-            </Text>
-          </Pressable>
+              <Text style={styles.sectionSub}>
+                Multi-device emergency relay
+              </Text>
+            </View>
 
-          <Pressable
-            style={[
-              styles.modeButton,
-              !demoMode &&
-                styles.modeButtonActive,
-            ]}
-            onPress={() => {
-              setDemoMode(false);
-              setPhoneOffline(false);
-            }}
-          >
-            <Ionicons
-              name="location-outline"
-              size={16}
-              color={
-                !demoMode
-                  ? "#1769E0"
-                  : "#8290A0"
-              }
-            />
+            <View style={styles.clusterBadge}>
+              <Text style={styles.clusterText}>
+                P2P_CLUSTER
+              </Text>
+            </View>
+          </View>
 
-            <Text
-              style={[
-                styles.modeText,
-                !demoMode &&
-                  styles.modeTextActive,
-              ]}
-            >
-              Real GPS
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.offlineButton,
-              phoneOffline &&
-                styles.offlineActive,
-            ]}
-            onPress={togglePhoneOffline}
-          >
-            <Ionicons
-              name={
-                phoneOffline
-                  ? "cloud-offline"
-                  : "phone-portrait-outline"
-              }
-              size={15}
-              color={
-                phoneOffline
-                  ? "#D93036"
-                  : "#6F7E90"
-              }
-            />
-
-            <Text
-              style={[
-                styles.offlineText,
-                phoneOffline &&
-                  styles.offlineTextActive,
-              ]}
-            >
-              {phoneOffline
-                ? "PHONE OFFLINE"
-                : "PHONE ONLINE"}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* MAP */}
-        <View style={styles.mapWrapper}>
-          <MapView
-            ref={mapRef}
-            provider={PROVIDER_GOOGLE}
-            style={styles.map}
-            initialRegion={{
-              latitude: 25.92,
-              longitude: 91.86,
-              latitudeDelta: 1.0,
-              longitudeDelta: 0.8,
-            }}
-            showsUserLocation={
-              !demoMode && !phoneOffline
-            }
-            showsCompass={true}
-            showsScale={true}
-            zoomEnabled={true}
-            scrollEnabled={true}
-            rotateEnabled={true}
-            pitchEnabled={false}
-          >
-            {/* ROUTE */}
-            <Polyline
-              coordinates={ROUTE}
-              strokeColor="#1769E0"
-              strokeWidth={5}
-              lineDashPattern={
-                phoneOffline
-                  ? [10, 8]
-                  : undefined
-              }
-            />
-
-            {/* ROUTE STOPS */}
-            {ROUTE.map((point, index) => (
-              <Marker
-                key={`route-${index}`}
-                coordinate={{
-                  latitude:
-                    point.latitude,
-                  longitude:
-                    point.longitude,
-                }}
-                pinColor={
-                  index === ROUTE.length - 1
-                    ? "#E5484D"
-                    : "#1769E0"
-                }
-                onPress={() =>
-                  setSelectedPlace(point)
-                }
-              >
-                <View
-                  style={[
-                    styles.stopMarker,
-                    index ===
-                      ROUTE.length - 1 &&
-                      styles.destinationMarker,
-                  ]}
-                >
-                  <Ionicons
-                    name={
-                      index ===
-                      ROUTE.length - 1
-                        ? "flag"
-                        : "location"
-                    }
-                    size={13}
-                    color="#FFFFFF"
-                  />
-                </View>
-
-                <Callout>
-                  <View style={styles.callout}>
-                    <Text
-                      style={
-                        styles.calloutTitle
-                      }
-                    >
-                      {point.name}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.calloutSub
-                      }
-                    >
-                      {point.state}
-                    </Text>
-                  </View>
-                </Callout>
-              </Marker>
-            ))}
-
-            {/* DESTINATION */}
-            <Marker
-              coordinate={{
-                latitude:
-                  DESTINATION.latitude,
-                longitude:
-                  DESTINATION.longitude,
-              }}
-              pinColor="#E5484D"
-              onPress={() =>
-                setSelectedPlace(
-                  DESTINATION
-                )
-              }
-            >
+          <View style={styles.networkDiagram}>
+            <View style={styles.deviceNode}>
               <View
                 style={[
-                  styles.placeMarker,
-                  {
-                    backgroundColor:
-                      "#E5484D",
-                  },
+                  styles.nodeIcon,
+                  styles.mainNode,
                 ]}
               >
                 <Ionicons
-                  name="business"
-                  size={18}
+                  name="phone-portrait"
+                  size={25}
                   color="#FFFFFF"
                 />
               </View>
 
-              <Callout>
-                <View style={styles.callout}>
-                  <Text
-                    style={
-                      styles.calloutTitle
-                    }
-                  >
-                    {DESTINATION.name}
-                  </Text>
+              <Text style={styles.nodeTitle}>
+                YOU
+              </Text>
 
-                  <Text
-                    style={styles.calloutSub}
-                  >
-                    Truck destination •{" "}
-                    {DESTINATION.state}
-                  </Text>
-                </View>
-              </Callout>
-            </Marker>
+              <Text style={styles.nodeSub}>
+                Sender
+              </Text>
+            </View>
 
-            {/* TRUCK */}
-            <Marker
-              coordinate={{
-                latitude:
-                  truckLocation.latitude,
-                longitude:
-                  truckLocation.longitude,
-              }}
-              anchor={{
-                x: 0.5,
-                y: 0.5,
-              }}
-              onPress={() =>
-                setSelectedPlace(TRUCK)
-              }
-            >
+            <View style={styles.connectionLine}>
+              <View style={styles.packetDot} />
+            </View>
+
+            <View style={styles.deviceNode}>
               <View
                 style={[
-                  styles.truckMarker,
-                  {
-                    transform: [
-                      {
-                        rotate: `${bearing}deg`,
-                      },
-                    ],
-                  },
+                  styles.nodeIcon,
+                  styles.relayNode,
                 ]}
               >
-                <View
-                  style={styles.truckArrow}
+                <Ionicons
+                  name="git-branch"
+                  size={25}
+                  color="#FFFFFF"
+                />
+              </View>
+
+              <Text style={styles.nodeTitle}>
+                RELAY
+              </Text>
+
+              <Text style={styles.nodeSub}>
+                {connectedPeers.length} peers
+              </Text>
+            </View>
+
+            <View style={styles.connectionLine}>
+              <View style={styles.packetDot} />
+            </View>
+
+            <View style={styles.deviceNode}>
+              <View
+                style={[
+                  styles.nodeIcon,
+                  styles.receiverNode,
+                ]}
+              >
+                <Ionicons
+                  name="medkit"
+                  size={25}
+                  color="#FFFFFF"
+                />
+              </View>
+
+              <Text style={styles.nodeTitle}>
+                RESPONDER
+              </Text>
+
+              <Text style={styles.nodeSub}>
+                Destination
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* TRANSPORT */}
+        <View style={styles.transportCard}>
+          <Text style={styles.sectionTitle}>
+            Connection Transport
+          </Text>
+
+          <View style={styles.transportRow}>
+            <TransportItem
+              icon="bluetooth"
+              title="Bluetooth"
+              value="ACTIVE"
+            />
+
+            <TransportItem
+              icon="wifi"
+              title="Wi-Fi P2P"
+              value="ACTIVE"
+            />
+
+            <TransportItem
+              icon="radio"
+              title="Nearby"
+              value="READY"
+            />
+          </View>
+        </View>
+
+        {/* STORE CARRY FORWARD */}
+        <View style={styles.storeCard}>
+          <View style={styles.storeHeader}>
+            <View style={styles.storeIcon}>
+              <Ionicons
+                name="cube-outline"
+                size={23}
+                color={COLORS.orange}
+              />
+            </View>
+
+            <View style={styles.storeTitleBox}>
+              <Text style={styles.sectionTitle}>
+                Store-Carry-Forward
+              </Text>
+
+              <Text style={styles.sectionSub}>
+                Messages survive temporary disconnection
+              </Text>
+            </View>
+
+            <View style={styles.offlineBadge}>
+              <Text style={styles.offlineText}>
+                OFFLINE READY
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.statsRow}>
+            <Stat
+              value={packets.length}
+              label="Stored"
+            />
+
+            <Stat
+              value={relayCount}
+              label="Relayed"
+            />
+
+            <Stat
+              value={forwardedCount}
+              label="Forwarded"
+            />
+          </View>
+        </View>
+
+        {/* PEERS */}
+        <View style={styles.peersSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.headerTextBlock}>
+              <Text style={styles.sectionTitle}>
+                Nearby Devices
+              </Text>
+
+              <Text style={styles.sectionSub}>
+                Google Nearby Connections
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.scanButton,
+                isDiscovering && styles.scanButtonDisabled,
+              ]}
+              activeOpacity={0.8}
+              disabled={isDiscovering}
+              onPress={discoverPeers}
+            >
+              <Ionicons
+                name={
+                  isDiscovering
+                    ? "sync-outline"
+                    : "scan-outline"
+                }
+                size={17}
+                color="#FFFFFF"
+              />
+
+              <Text style={styles.scanText}>
+                {isDiscovering ? "Scanning" : "Scan"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {peers.map((peer) => (
+            <TouchableOpacity
+              key={peer.id}
+              activeOpacity={0.82}
+              onPress={() => showPeerDetails(peer)}
+              style={styles.peerCard}
+            >
+              <View style={styles.peerIcon}>
+                <Ionicons
+                  name="phone-portrait-outline"
+                  size={22}
+                  color={COLORS.primary}
+                />
+              </View>
+
+              <View style={styles.peerInfo}>
+                <Text
+                  style={styles.peerName}
+                  numberOfLines={1}
                 >
+                  {peer.name}
+                </Text>
+
+                <View style={styles.peerMeta}>
                   <Ionicons
-                    name="arrow-up"
-                    size={18}
-                    color="#FFFFFF"
+                    name="location-outline"
+                    size={13}
+                    color={COLORS.muted}
                   />
+
+                  <Text style={styles.peerDistance}>
+                    {peer.distance}
+                  </Text>
+
+                  <Text style={styles.dotSeparator}>
+                    •
+                  </Text>
+
+                  <Text style={styles.signalText}>
+                    {peer.signal}% signal
+                  </Text>
                 </View>
               </View>
 
-              <Callout>
-                <View
-                  style={styles.truckCallout}
+              {peer.status === "DISCOVERED" ? (
+                <TouchableOpacity
+                  style={styles.connectButton}
+                  activeOpacity={0.75}
+                  onPress={() => connectPeer(peer.id)}
                 >
-                  <Text
-                    style={
-                      styles.calloutTitle
-                    }
-                  >
-                    🚚 {TRUCK.number}
+                  <Text style={styles.connectText}>
+                    Connect
                   </Text>
-
-                  <Text
-                    style={styles.calloutSub}
-                  >
-                    {TRUCK.driver}
-                  </Text>
-
-                  <Text
-                    style={styles.calloutSub}
-                  >
-                    {TRUCK.cargo}
-                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.connectedBadge}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={14}
+                    color={COLORS.green}
+                  />
 
                   <Text
                     style={[
-                      styles.calloutSub,
+                      styles.connectedText,
                       {
-                        color: "#1769E0",
-                        marginTop: 5,
+                        color: COLORS.green,
                       },
                     ]}
                   >
-                    Direction: {direction}
+                    Connected
                   </Text>
                 </View>
-              </Callout>
-            </Marker>
-          </MapView>
-
-          {/* MAP TOP STATUS */}
-          <View style={styles.mapTopCard}>
-            <View style={styles.mapSignal}>
-              <Ionicons
-                name={
-                  phoneOffline
-                    ? "cloud-offline-outline"
-                    : "radio-outline"
-                }
-                size={16}
-                color={
-                  phoneOffline
-                    ? "#D93036"
-                    : "#1769E0"
-                }
-              />
-            </View>
-
-            <View>
-              <Text style={styles.mapTopTitle}>
-                {phoneOffline
-                  ? "Fallback Tracking"
-                  : "Live Truck Map"}
-              </Text>
-
-              <Text
-                style={styles.mapTopSubtitle}
-              >
-                {phoneOffline
-                  ? "Driver phone offline"
-                  : "Assam → Meghalaya"}
-              </Text>
-            </View>
-          </View>
-
-          {/* MAP CONTROLS */}
-          <View style={styles.mapControls}>
-            <Pressable
-              style={styles.mapControl}
-              onPress={focusTruck}
-            >
-              <Ionicons
-                name="navigate"
-                size={19}
-                color="#1769E0"
-              />
-            </Pressable>
-
-            <Pressable
-              style={styles.mapControl}
-              onPress={fitRoute}
-            >
-              <Ionicons
-                name="expand"
-                size={19}
-                color="#1769E0"
-              />
-            </Pressable>
-          </View>
-
-          {/* ACCURACY */}
-          <View style={styles.accuracyBadge}>
-            <Ionicons
-              name="locate-outline"
-              size={14}
-              color="#1769E0"
-            />
-
-            <Text
-              style={styles.accuracyText}
-            >
-              {accuracy
-                ? `±${Math.round(
-                    accuracy
-                  )}m`
-                : demoMode
-                ? "Demo ±8m"
-                : "--"}
-            </Text>
-          </View>
-
-          {/* NORTH */}
-          <View style={styles.northBadge}>
-            <Text style={styles.northN}>
-              N
-            </Text>
-
-            <Ionicons
-              name="arrow-up"
-              size={14}
-              color="#172334"
-            />
-          </View>
+              )}
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* SELECTED PLACE */}
-        {selectedPlace && (
-          <View style={styles.selectedCard}>
-            <View
-              style={styles.selectedIcon}
-            >
-              <Ionicons
-                name={
-                  selectedPlace.id
-                    ? "car"
-                    : "location"
-                }
-                size={19}
-                color="#1769E0"
-              />
-            </View>
-
-            <View
-              style={styles.selectedInfo}
-            >
-              <Text
-                style={styles.selectedTitle}
-              >
-                {selectedPlace.name ||
-                  selectedPlace.number}
+        {/* PACKET QUEUE */}
+        <View style={styles.packetSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.headerTextBlock}>
+              <Text style={styles.sectionTitle}>
+                Packet Queue
               </Text>
 
-              <Text
-                style={styles.selectedSubtitle}
-              >
-                {selectedPlace.state ||
-                  selectedPlace.driver ||
-                  "Selected location"}
+              <Text style={styles.sectionSub}>
+                TTL + Packet ID protection
               </Text>
             </View>
 
-            <Pressable
-              onPress={() =>
-                setSelectedPlace(null)
-              }
-            >
-              <Ionicons
-                name="close-circle"
-                size={22}
-                color="#A0ACB9"
-              />
-            </Pressable>
-          </View>
-        )}
-
-        {/* LIVE INFO */}
-        <ScrollView
-          showsVerticalScrollIndicator={
-            false
-          }
-          contentContainerStyle={
-            styles.scrollContent
-          }
-        >
-          <View style={styles.infoGrid}>
-
-            {/* DISTANCE */}
-            <View style={styles.infoCard}>
-              <View
-                style={[
-                  styles.infoIcon,
-                  {
-                    backgroundColor:
-                      "#EAF2FF",
-                  },
-                ]}
+            {packets.length > 0 && (
+              <TouchableOpacity
+                onPress={clearQueue}
+                activeOpacity={0.7}
+                hitSlop={{
+                  top: 10,
+                  bottom: 10,
+                  left: 10,
+                  right: 10,
+                }}
               >
-                <Ionicons
-                  name="speedometer-outline"
-                  size={19}
-                  color="#1769E0"
-                />
-              </View>
-
-              <Text
-                style={styles.infoLabel}
-              >
-                DISTANCE
-              </Text>
-
-              <Text
-                style={styles.infoValue}
-              >
-                {formatDistance(
-                  destinationDistance
-                )}
-              </Text>
-
-              <Text
-                style={styles.infoSmall}
-              >
-                to destination
-              </Text>
-            </View>
-
-            {/* SPEED */}
-            <View style={styles.infoCard}>
-              <View
-                style={[
-                  styles.infoIcon,
-                  {
-                    backgroundColor:
-                      "#E9F8F1",
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="flash-outline"
-                  size={19}
-                  color="#159A5B"
-                />
-              </View>
-
-              <Text
-                style={styles.infoLabel}
-              >
-                SPEED
-              </Text>
-
-              <Text
-                style={styles.infoValue}
-              >
-                {speed}
-              </Text>
-
-              <Text
-                style={styles.infoSmall}
-              >
-                km/h
-              </Text>
-            </View>
-
-            {/* DIRECTION */}
-            <View style={styles.infoCard}>
-              <View
-                style={[
-                  styles.infoIcon,
-                  {
-                    backgroundColor:
-                      "#FFF4E5",
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="compass-outline"
-                  size={19}
-                  color="#E78B17"
-                />
-              </View>
-
-              <Text
-                style={styles.infoLabel}
-              >
-                DIRECTION
-              </Text>
-
-              <Text
-                style={[
-                  styles.infoValue,
-                  {
-                    fontSize: 15,
-                  },
-                ]}
-              >
-                {direction}
-              </Text>
-
-              <Text
-                style={styles.infoSmall}
-              >
-                {Math.round(bearing)}°
-              </Text>
-            </View>
-
-            {/* ETA */}
-            <View style={styles.infoCard}>
-              <View
-                style={[
-                  styles.infoIcon,
-                  {
-                    backgroundColor:
-                      "#F1EBFF",
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={19}
-                  color="#7A4BE0"
-                />
-              </View>
-
-              <Text
-                style={styles.infoLabel}
-              >
-                ETA
-              </Text>
-
-              <Text
-                style={[
-                  styles.infoValue,
-                  {
-                    fontSize: 15,
-                  },
-                ]}
-              >
-                {etaText}
-              </Text>
-
-              <Text
-                style={styles.infoSmall}
-              >
-                approx.
-              </Text>
-            </View>
-          </View>
-
-          {/* TRUCK STATUS */}
-          <View style={styles.statusCard}>
-            <View
-              style={[
-                styles.statusIcon,
-                {
-                  backgroundColor:
-                    phoneOffline
-                      ? "#FFF0F0"
-                      : "#E9F8F1",
-                },
-              ]}
-            >
-              <Ionicons
-                name={
-                  phoneOffline
-                    ? "cloud-offline"
-                    : "radio"
-                }
-                size={21}
-                color={
-                  phoneOffline
-                    ? "#D93036"
-                    : "#18A866"
-                }
-              />
-            </View>
-
-            <View
-              style={styles.statusInfo}
-            >
-              <Text
-                style={styles.statusTitle}
-              >
-                {phoneOffline
-                  ? "Driver Phone Offline"
-                  : tracking
-                  ? "Truck Tracking Active"
-                  : "Truck Tracking Stopped"}
-              </Text>
-
-              <Text
-                style={styles.statusSubtitle}
-              >
-                {phoneOffline
-                  ? "Fallback route is showing estimated truck movement."
-                  : tracking
-                  ? "Transport owner can monitor truck movement live."
-                  : "Start tracking to monitor the truck."}
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.statusPill,
-                {
-                  backgroundColor:
-                    phoneOffline
-                      ? "#FFF0F0"
-                      : tracking
-                      ? "#E9F8F1"
-                      : "#F1F4F8",
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.statusPillText,
-                  {
-                    color:
-                      phoneOffline
-                        ? "#D93036"
-                        : tracking
-                        ? "#159A5B"
-                        : "#7A8797",
-                  },
-                ]}
-              >
-                {phoneOffline
-                  ? "FALLBACK"
-                  : tracking
-                  ? "ONLINE"
-                  : "OFFLINE"}
-              </Text>
-            </View>
-          </View>
-
-          {/* ROUTE DETAILS */}
-          <View style={styles.routeCard}>
-            <View style={styles.routeHeader}>
-              <View>
-                <Text
-                  style={styles.routeTitle}
-                >
-                  Transport Route
+                <Text style={styles.clearText}>
+                  Clear
                 </Text>
-
-                <Text
-                  style={
-                    styles.routeSubtitle
-                  }
-                >
-                  Assam → Meghalaya
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() =>
-                  setShowRouteInfo(
-                    !showRouteInfo
-                  )
-                }
-              >
-                <Ionicons
-                  name={
-                    showRouteInfo
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
-                  size={20}
-                  color="#657589"
-                />
-              </Pressable>
-            </View>
-
-            {showRouteInfo && (
-              <View
-                style={styles.routeList}
-              >
-                {ROUTE.map(
-                  (point, index) => (
-                    <Pressable
-                      key={point.name}
-                      style={
-                        styles.routeItem
-                      }
-                      onPress={() => {
-                        setSelectedPlace(
-                          point
-                        );
-
-                        if (
-                          mapRef.current
-                        ) {
-                          mapRef.current.animateToRegion(
-                            {
-                              latitude:
-                                point.latitude,
-                              longitude:
-                                point.longitude,
-                              latitudeDelta:
-                                0.12,
-                              longitudeDelta:
-                                0.12,
-                            },
-                            600
-                          );
-                        }
-                      }}
-                    >
-                      <View
-                        style={
-                          styles.routeTimeline
-                        }
-                      >
-                        <View
-                          style={[
-                            styles.routeDot,
-                            index ===
-                              routeIndex &&
-                              styles.routeDotActive,
-                            index ===
-                              ROUTE.length -
-                                1 &&
-                              styles.routeDotDestination,
-                          ]}
-                        />
-
-                        {index <
-                          ROUTE.length -
-                            1 && (
-                          <View
-                            style={
-                              styles.routeLine
-                            }
-                          />
-                        )}
-                      </View>
-
-                      <View
-                        style={
-                          styles.routeItemInfo
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.routePlace
-                          }
-                        >
-                          {point.name}
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.routeState
-                          }
-                        >
-                          {point.state}
-                        </Text>
-                      </View>
-
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color="#A5B0BC"
-                      />
-                    </Pressable>
-                  )
-                )}
-              </View>
+              </TouchableOpacity>
             )}
           </View>
 
-          {/* COORDINATES */}
-          <View
-            style={styles.coordinateCard}
-          >
-            <Text
-              style={styles.coordinateTitle}
-            >
-              Current Truck Location
-            </Text>
-
-            <View
-              style={
-                styles.coordinateRow
-              }
-            >
-              <View
-                style={
-                  styles.coordinateItem
-                }
-              >
-                <Text
-                  style={
-                    styles.coordinateLabel
-                  }
-                >
-                  LATITUDE
-                </Text>
-
-                <Text
-                  style={
-                    styles.coordinateValue
-                  }
-                >
-                  {formatCoordinate(
-                    truckLocation.latitude
-                  )}
-                </Text>
-              </View>
-
-              <View
-                style={styles.divider}
-              />
-
-              <View
-                style={
-                  styles.coordinateItem
-                }
-              >
-                <Text
-                  style={
-                    styles.coordinateLabel
-                  }
-                >
-                  LONGITUDE
-                </Text>
-
-                <Text
-                  style={
-                    styles.coordinateValue
-                  }
-                >
-                  {formatCoordinate(
-                    truckLocation.longitude
-                  )}
-                </Text>
-              </View>
-            </View>
-
-            <View
-              style={
-                styles.updateRow
-              }
-            >
+          {packets.length === 0 ? (
+            <View style={styles.emptyQueue}>
               <Ionicons
-                name="sync-outline"
-                size={13}
-                color="#7C8B9D"
+                name="file-tray-outline"
+                size={32}
+                color="#94A3B8"
               />
 
-              <Text
-                style={styles.updateText}
-              >
-                Last update: {lastUpdate}
+              <Text style={styles.emptyTitle}>
+                No packets stored
+              </Text>
+
+              <Text style={styles.emptySub}>
+                Emergency packets will appear here
               </Text>
             </View>
-          </View>
-
-          {/* ACTIONS */}
-          <View style={styles.actions}>
-            <Pressable
-              onPress={
-                tracking
-                  ? stopTracking
-                  : startTracking
-              }
-              disabled={loading}
-              style={({ pressed }) => [
-                styles.mainButton,
-                tracking &&
-                  styles.stopButton,
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator
-                  color="#FFFFFF"
-                />
-              ) : (
-                <>
+          ) : (
+            packets.map((packet) => (
+              <View
+                key={packet.id}
+                style={styles.packetCard}
+              >
+                <View style={styles.packetIcon}>
                   <Ionicons
-                    name={
-                      tracking
-                        ? "stop-circle-outline"
-                        : "navigate-circle-outline"
-                    }
-                    size={23}
+                    name="warning"
+                    size={19}
                     color="#FFFFFF"
                   />
+                </View>
 
+                <View style={styles.packetInfo}>
                   <Text
-                    style={
-                      styles.mainButtonText
-                    }
+                    style={styles.packetId}
+                    numberOfLines={1}
                   >
-                    {tracking
-                      ? "Stop Tracking"
-                      : "Start GPS Tracking"}
+                    {packet.id}
                   </Text>
-                </>
-              )}
-            </Pressable>
 
-            <Pressable
-              onPress={togglePhoneOffline}
-              style={[
-                styles.secondaryButton,
-                phoneOffline &&
-                  styles.secondaryDanger,
-              ]}
-            >
-              <Ionicons
-                name={
-                  phoneOffline
-                    ? "phone-portrait"
-                    : "cloud-offline-outline"
-                }
-                size={19}
-                color={
-                  phoneOffline
-                    ? "#159A5B"
-                    : "#D93036"
-                }
-              />
+                  <Text style={styles.packetType}>
+                    {packet.type}
+                  </Text>
 
-              <Text
-                style={[
-                  styles.secondaryButtonText,
-                  phoneOffline &&
-                    styles.secondarySuccessText,
-                ]}
-              >
-                {phoneOffline
-                  ? "Reconnect Driver Phone"
-                  : "Simulate Phone Offline"}
-              </Text>
-            </Pressable>
+                  <View style={styles.packetMeta}>
+                    <Text style={styles.ttl}>
+                      TTL: {packet.ttl}
+                    </Text>
+
+                    <Text style={styles.packetStatus}>
+                      {packet.status}
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={[
+                    styles.packetStatusDot,
+                    {
+                      backgroundColor:
+                        getStatusColor(packet.status),
+                    },
+                  ]}
+                />
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* SEND EMERGENCY */}
+        <TouchableOpacity
+          style={styles.emergencyButton}
+          activeOpacity={0.82}
+          onPress={() => {
+            if (connectedPeers.length === 0) {
+              Alert.alert(
+                "No Nearby Devices",
+                "No relay device is currently connected. The packet will remain stored locally."
+              );
+            }
+
+            sendEmergencyPacket();
+          }}
+        >
+          <View style={styles.emergencyIcon}>
+            <Ionicons
+              name="radio-outline"
+              size={25}
+              color="#FFFFFF"
+            />
           </View>
 
-          <View style={styles.footer}>
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={15}
-              color="#7C8B9D"
-            />
+          <View style={styles.emergencyTextBox}>
+            <Text style={styles.emergencyTitle}>
+              Send Emergency Packet
+            </Text>
 
-            <Text
-              style={styles.footerText}
-            >
-              Prototype transport tracking •
-              Live GPS + fallback simulation
+            <Text style={styles.emergencySub}>
+              Relay through nearby devices
             </Text>
           </View>
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+
+          <View style={styles.arrowButton}>
+            <Ionicons
+              name="arrow-forward"
+              size={23}
+              color="#FFFFFF"
+            />
+          </View>
+        </TouchableOpacity>
+
+        {/* TECHNOLOGY */}
+        <View style={styles.techCard}>
+          <Text style={styles.techTitle}>
+            Network Architecture
+          </Text>
+
+          <TechRow
+            icon="radio-outline"
+            title="Google Nearby Connections"
+            description="Device discovery & connection"
+          />
+
+          <TechRow
+            icon="bluetooth-outline"
+            title="Bluetooth + Wi-Fi P2P"
+            description="Underlying communication transport"
+          />
+
+          <TechRow
+            icon="git-network-outline"
+            title="P2P_CLUSTER"
+            description="One-to-many packet relay"
+          />
+
+          <TechRow
+            icon="archive-outline"
+            title="Store-Carry-Forward"
+            description="Save packet when internet is unavailable"
+          />
+
+          <TechRow
+            icon="shield-checkmark-outline"
+            title="TTL + Packet ID"
+            description="Prevents duplicate & infinite forwarding"
+          />
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-// =========================================================
-// STYLES
-// =========================================================
+/* ---------------- COMPONENTS ---------------- */
+
+function TransportItem({ icon, title, value }) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.75}
+      style={styles.transportItem}
+    >
+      <View style={styles.transportIcon}>
+        <Ionicons
+          name={icon}
+          size={21}
+          color={COLORS.primary}
+        />
+      </View>
+
+      <Text
+        style={styles.transportTitle}
+        numberOfLines={1}
+      >
+        {title}
+      </Text>
+
+      <Text style={styles.transportValue}>
+        {value}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function Stat({ value, label }) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.75}
+      style={styles.stat}
+    >
+      <Text style={styles.statValue}>
+        {value}
+      </Text>
+
+      <Text style={styles.statLabel}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function TechRow({
+  icon,
+  title,
+  description,
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.75}
+      style={styles.techRow}
+    >
+      <View style={styles.techIcon}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={COLORS.primary}
+        />
+      </View>
+
+      <View style={styles.techTextBox}>
+        <Text
+          style={styles.techRowTitle}
+          numberOfLines={2}
+        >
+          {title}
+        </Text>
+
+        <Text
+          style={styles.techRowSub}
+          numberOfLines={2}
+        >
+          {description}
+        </Text>
+      </View>
+
+      <Ionicons
+        name="checkmark-circle"
+        size={19}
+        color={COLORS.green}
+      />
+    </TouchableOpacity>
+  );
+}
+
+/* ---------------- RESPONSIVE STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-
   container: {
     flex: 1,
-    paddingHorizontal: 15,
-    paddingTop: 8,
+    backgroundColor: COLORS.bg,
+  },
+
+  content: {
+    width: "100%",
+    maxWidth: IS_TABLET ? 820 : 680,
+    alignSelf: "center",
+    paddingHorizontal: IS_SMALL_DEVICE
+      ? 12
+      : IS_TABLET
+      ? 28
+      : 18,
+    paddingTop:
+      Platform.OS === "android" ? 12 : 18,
+    paddingBottom: 48,
   },
 
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: IS_SMALL_DEVICE ? 14 : 18,
   },
 
-  logo: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    backgroundColor: "#EAF2FF",
+  backButton: {
+    width: 46,
+    height: 46,
+    minWidth: 46,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  headerTitleBox: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 12,
+    marginRight: 10,
+  },
+
+  title: {
+    fontSize: IS_SMALL_DEVICE
+      ? 20
+      : IS_TABLET
+      ? 26
+      : 23,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+
+  subtitle: {
+    fontSize: IS_SMALL_DEVICE ? 11 : 12,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+
+  networkIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#E8F2FB",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  headerText: {
+  statusCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: IS_SMALL_DEVICE ? 14 : 17,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 14,
+  },
+
+  statusLeft: {
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
-    marginLeft: 11,
+    minWidth: 0,
   },
 
-  title: {
-    fontSize: 19,
+  statusTextBox: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  statusCircle: {
+    width: IS_SMALL_DEVICE ? 44 : 48,
+    height: IS_SMALL_DEVICE ? 44 : 48,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  statusTitle: {
+    fontSize: IS_SMALL_DEVICE ? 13 : 14,
     fontWeight: "800",
-    color: "#172334",
+    color: COLORS.text,
+    flexShrink: 1,
   },
 
-  subtitle: {
-    fontSize: 10,
-    color: "#8492A3",
-    marginTop: 3,
+  statusSubtitle: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 4,
   },
 
   liveBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 9,
+    minHeight: 32,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
   },
 
   liveDot: {
     width: 7,
     height: 7,
-    borderRadius: 5,
+    borderRadius: 7,
     marginRight: 5,
   },
 
   liveText: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-
-  // MODE BAR
-
-  modeBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-
-  modeButton: {
-    height: 35,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 11,
-    borderRadius: 10,
-    backgroundColor: "#F5F7FA",
-    marginRight: 7,
-  },
-
-  modeButtonActive: {
-    backgroundColor: "#EAF2FF",
-    borderWidth: 1,
-    borderColor: "#C9DDFA",
-  },
-
-  modeText: {
-    marginLeft: 5,
     fontSize: 9,
-    fontWeight: "700",
-    color: "#8290A0",
+    fontWeight: "900",
   },
 
-  modeTextActive: {
-    color: "#1769E0",
-  },
-
-  offlineButton: {
-    flex: 1,
-    height: 35,
-    borderRadius: 10,
-    backgroundColor: "#F5F7FA",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  offlineActive: {
-    backgroundColor: "#FFF0F0",
-  },
-
-  offlineText: {
-    marginLeft: 5,
-    color: "#6F7E90",
-    fontSize: 8,
-    fontWeight: "800",
-  },
-
-  offlineTextActive: {
-    color: "#D93036",
-  },
-
-  // MAP
-
-  mapWrapper: {
-    height: 355,
+  networkCard: {
+    backgroundColor: "#FFFFFF",
     borderRadius: 22,
-    overflow: "hidden",
+    padding: IS_SMALL_DEVICE ? 14 : 18,
     borderWidth: 1,
-    borderColor: "#DCE6F0",
-    backgroundColor: "#EAF1F7",
-    position: "relative",
+    borderColor: COLORS.border,
+    marginBottom: 14,
   },
 
-  map: {
-    flex: 1,
-  },
-
-  mapTopCard: {
-    position: "absolute",
-    top: 11,
-    left: 11,
-    right: 80,
-    backgroundColor:
-      "rgba(255,255,255,0.96)",
-    borderRadius: 13,
-    padding: 9,
+  sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E1E8F0",
+    justifyContent: "space-between",
+    marginBottom: 15,
+    gap: 10,
   },
 
-  mapSignal: {
-    width: 33,
-    height: 33,
-    borderRadius: 10,
-    backgroundColor: "#EAF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
+  headerTextBlock: {
+    flex: 1,
+    minWidth: 0,
   },
 
-  mapTopTitle: {
-    color: "#263649",
-    fontSize: 10,
+  sectionTitle: {
+    fontSize: IS_SMALL_DEVICE
+      ? 14
+      : IS_TABLET
+      ? 17
+      : 15,
     fontWeight: "800",
+    color: COLORS.text,
   },
 
-  mapTopSubtitle: {
-    color: "#8795A5",
-    fontSize: 8,
-    marginTop: 2,
+  sectionSub: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 3,
   },
 
-  mapControls: {
-    position: "absolute",
-    right: 11,
-    top: 11,
+  clusterBadge: {
+    backgroundColor: "#E8F2FB",
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 9,
+    flexShrink: 0,
   },
 
-  mapControl: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor:
-      "rgba(255,255,255,0.96)",
+  clusterText: {
+    color: COLORS.primary,
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  networkDiagram: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 12,
+    width: "100%",
+  },
+
+  deviceNode: {
+    alignItems: "center",
+    width: IS_SMALL_DEVICE ? 64 : 82,
+    flexShrink: 0,
+  },
+
+  nodeIcon: {
+    width: IS_SMALL_DEVICE ? 44 : 52,
+    height: IS_SMALL_DEVICE ? 44 : 52,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 7,
-    borderWidth: 1,
-    borderColor: "#E1E8F0",
   },
 
-  accuracyBadge: {
-    position: "absolute",
-    bottom: 11,
-    left: 11,
-    backgroundColor:
-      "rgba(255,255,255,0.96)",
-    borderRadius: 10,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    flexDirection: "row",
-    alignItems: "center",
+  mainNode: {
+    backgroundColor: COLORS.primary,
   },
 
-  accuracyText: {
-    color: "#657589",
-    fontSize: 8,
-    fontWeight: "700",
-    marginLeft: 4,
+  relayNode: {
+    backgroundColor: COLORS.orange,
   },
 
-  northBadge: {
-    position: "absolute",
-    right: 11,
-    bottom: 11,
-    width: 38,
-    height: 45,
-    borderRadius: 11,
-    backgroundColor:
-      "rgba(255,255,255,0.96)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E1E8F0",
+  receiverNode: {
+    backgroundColor: COLORS.green,
   },
 
-  northN: {
-    color: "#172334",
+  nodeTitle: {
     fontSize: 9,
     fontWeight: "900",
-    marginBottom: -1,
+    color: COLORS.text,
   },
 
-  // MARKERS
-
-  stopMarker: {
-    width: 25,
-    height: 25,
-    borderRadius: 13,
-    backgroundColor: "#1769E0",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  destinationMarker: {
-    backgroundColor: "#E5484D",
-  },
-
-  placeMarker: {
-    width: 39,
-    height: 39,
-    borderRadius: 20,
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 5,
-  },
-
-  truckMarker: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor:
-      "rgba(23,105,224,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  truckArrow: {
-    width: 37,
-    height: 37,
-    borderRadius: 19,
-    backgroundColor: "#1769E0",
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 7,
-  },
-
-  callout: {
-    minWidth: 140,
-    padding: 5,
-  },
-
-  truckCallout: {
-    minWidth: 170,
-    padding: 5,
-  },
-
-  calloutTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#172334",
-  },
-
-  calloutSub: {
-    fontSize: 9,
-    color: "#718095",
-    marginTop: 3,
-  },
-
-  // SELECTED
-
-  selectedCard: {
-    marginTop: 8,
-    padding: 10,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DDE7F1",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  selectedIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: "#EAF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  selectedInfo: {
-    flex: 1,
-    marginLeft: 9,
-  },
-
-  selectedTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#263649",
-  },
-
-  selectedSubtitle: {
+  nodeSub: {
     fontSize: 8,
-    color: "#8492A3",
-    marginTop: 3,
-  },
-
-  // SCROLL
-
-  scrollContent: {
-    paddingBottom: 25,
-  },
-
-  // INFO GRID
-
-  infoGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
-
-  infoCard: {
-    width: "48.5%",
-    minHeight: 125,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E0E8F1",
-    padding: 12,
-    marginBottom: 9,
-  },
-
-  infoIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  infoLabel: {
-    fontSize: 7,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    color: "#91A0B0",
-    marginTop: 9,
-  },
-
-  infoValue: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#263649",
-    marginTop: 3,
-  },
-
-  infoSmall: {
-    color: "#8997A7",
-    fontSize: 8,
+    color: COLORS.muted,
     marginTop: 2,
+    textAlign: "center",
   },
 
-  // STATUS
+  connectionLine: {
+    height: 2,
+    flex: 1,
+    minWidth: 12,
+    marginHorizontal: IS_SMALL_DEVICE ? 2 : 5,
+    backgroundColor: "#CBD5E1",
+    position: "relative",
+  },
 
-  statusCard: {
-    padding: 12,
-    borderRadius: 17,
+  packetDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 7,
+    backgroundColor: COLORS.primary,
+    position: "absolute",
+    top: -3,
+    left: "50%",
+    marginLeft: -3.5,
+  },
+
+  transportCard: {
     backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: IS_SMALL_DEVICE ? 14 : 18,
     borderWidth: 1,
-    borderColor: "#E0E8F1",
+    borderColor: COLORS.border,
+    marginBottom: 14,
+  },
+
+  transportRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 15,
+    gap: 8,
+  },
+
+  transportItem: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+
+  transportIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#E8F2FB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 7,
+  },
+
+  transportTitle: {
+    fontSize: IS_SMALL_DEVICE ? 9 : 10,
+    fontWeight: "800",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+
+  transportValue: {
+    fontSize: 8,
+    color: COLORS.green,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+
+  storeCard: {
+    backgroundColor: "#FFFDF7",
+    borderRadius: 22,
+    padding: IS_SMALL_DEVICE ? 14 : 18,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 20,
+  },
+
+  storeHeader: {
     flexDirection: "row",
     alignItems: "center",
   },
 
-  statusIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
+  storeIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 14,
+    backgroundColor: "#FEF3C7",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 11,
   },
 
-  statusInfo: {
+  storeTitleBox: {
     flex: 1,
-    marginLeft: 10,
+    minWidth: 0,
   },
 
-  statusTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#263649",
-  },
-
-  statusSubtitle: {
-    fontSize: 8,
-    color: "#8492A3",
-    marginTop: 4,
-    lineHeight: 12,
-  },
-
-  statusPill: {
+  offlineBadge: {
+    backgroundColor: "#FEF3C7",
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 8,
-  },
-
-  statusPillText: {
-    fontSize: 7,
-    fontWeight: "900",
-  },
-
-  // ROUTE
-
-  routeCard: {
-    marginTop: 9,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E0E8F1",
-    padding: 14,
-  },
-
-  routeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  routeTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#263649",
-  },
-
-  routeSubtitle: {
-    fontSize: 8,
-    color: "#8795A5",
-    marginTop: 3,
-  },
-
-  routeList: {
-    marginTop: 12,
-  },
-
-  routeItem: {
-    minHeight: 52,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  routeTimeline: {
-    width: 28,
-    alignItems: "center",
-    alignSelf: "stretch",
-  },
-
-  routeDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#D3DEE9",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    elevation: 2,
-  },
-
-  routeDotActive: {
-    backgroundColor: "#1769E0",
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-  },
-
-  routeDotDestination: {
-    backgroundColor: "#E5484D",
-  },
-
-  routeLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: "#DCE6F0",
-    marginTop: 2,
-    marginBottom: -2,
-  },
-
-  routeItemInfo: {
-    flex: 1,
+    flexShrink: 0,
     marginLeft: 8,
   },
 
-  routePlace: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#34465B",
+  offlineText: {
+    fontSize: 7,
+    color: COLORS.orange,
+    fontWeight: "900",
   },
 
-  routeState: {
-    fontSize: 8,
-    color: "#8A98A9",
+  statsRow: {
+    flexDirection: "row",
+    marginTop: 18,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#FDE68A",
+  },
+
+  stat: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+
+  statValue: {
+    fontSize: IS_SMALL_DEVICE ? 19 : 21,
+    fontWeight: "900",
+    color: COLORS.text,
+  },
+
+  statLabel: {
+    fontSize: 9,
+    color: COLORS.muted,
     marginTop: 3,
   },
 
-  // COORDINATES
-
-  coordinateCard: {
-    marginTop: 9,
-    padding: 14,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E0E8F1",
+  peersSection: {
+    marginBottom: 20,
   },
 
-  coordinateTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#263649",
-    marginBottom: 12,
-  },
-
-  coordinateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  coordinateItem: {
-    flex: 1,
-  },
-
-  coordinateLabel: {
-    fontSize: 7,
-    fontWeight: "900",
-    color: "#91A0B0",
-    letterSpacing: 0.7,
-  },
-
-  coordinateValue: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#1769E0",
-    marginTop: 5,
-  },
-
-  divider: {
-    width: 1,
-    height: 35,
-    backgroundColor: "#E3EAF1",
-    marginHorizontal: 14,
-  },
-
-  updateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    paddingTop: 9,
-    borderTopWidth: 1,
-    borderTopColor: "#EEF2F6",
-  },
-
-  updateText: {
-    fontSize: 8,
-    color: "#8492A3",
-    marginLeft: 5,
-  },
-
-  // ACTIONS
-
-  actions: {
-    marginTop: 10,
-  },
-
-  mainButton: {
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: "#1769E0",
+  scanButton: {
+    minHeight: 42,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    elevation: 4,
-    shadowColor: "#1769E0",
-    shadowOpacity: 0.22,
-    shadowRadius: 9,
+    gap: 5,
+  },
+
+  scanButtonDisabled: {
+    opacity: 0.65,
+  },
+
+  scanText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  peerCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: IS_SMALL_DEVICE ? 11 : 13,
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  peerIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 14,
+    backgroundColor: "#E8F2FB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+
+  peerInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  peerName: {
+    fontSize: IS_SMALL_DEVICE ? 11 : 12,
+    fontWeight: "800",
+    color: COLORS.text,
+    flexShrink: 1,
+  },
+
+  peerMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
+
+  peerDistance: {
+    fontSize: 9,
+    color: COLORS.muted,
+    marginLeft: 3,
+  },
+
+  dotSeparator: {
+    marginHorizontal: 5,
+    color: "#CBD5E1",
+  },
+
+  signalText: {
+    fontSize: 9,
+    color: COLORS.muted,
+  },
+
+  connectButton: {
+    minHeight: 40,
+    minWidth: 76,
+    backgroundColor: "#E8F2FB",
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 7,
+  },
+
+  connectText: {
+    fontSize: 9,
+    color: COLORS.primary,
+    fontWeight: "800",
+  },
+
+  connectedBadge: {
+    minHeight: 40,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    borderRadius: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginLeft: 6,
+  },
+
+  connectedText: {
+    fontSize: 8,
+    fontWeight: "800",
+  },
+
+  packetSection: {
+    marginBottom: 18,
+  },
+
+  clearText: {
+    color: COLORS.red,
+    fontSize: 12,
+    fontWeight: "800",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+
+  emptyQueue: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+    paddingVertical: IS_SMALL_DEVICE ? 28 : 34,
+    paddingHorizontal: 18,
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.text,
+    marginTop: 8,
+  },
+
+  emptySub: {
+    fontSize: 10,
+    color: COLORS.muted,
+    marginTop: 4,
+    textAlign: "center",
+  },
+
+  packetCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 17,
+    padding: 13,
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  packetIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.red,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+
+  packetInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  packetId: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: COLORS.text,
+  },
+
+  packetType: {
+    fontSize: 8,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+
+  packetMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 5,
+    flexWrap: "wrap",
+  },
+
+  ttl: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: COLORS.orange,
+  },
+
+  packetStatus: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: COLORS.primary,
+    marginLeft: 10,
+  },
+
+  packetStatusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+
+  emergencyButton: {
+    backgroundColor: COLORS.primaryDark,
+    borderRadius: 20,
+    minHeight: 74,
+    padding: IS_SMALL_DEVICE ? 13 : 16,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    elevation: 5,
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
     shadowOffset: {
       width: 0,
       height: 4,
     },
   },
 
-  stopButton: {
-    backgroundColor: "#E5484D",
-    shadowColor: "#E5484D",
+  emergencyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
 
-  mainButtonText: {
+  emergencyTextBox: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  emergencyTitle: {
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    fontWeight: "900",
+  },
+
+  emergencySub: {
+    color: "#CBD5E1",
+    fontSize: 9,
+    marginTop: 3,
+  },
+
+  arrowButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
     marginLeft: 8,
   },
 
-  secondaryButton: {
-    height: 48,
-    marginTop: 8,
-    borderRadius: 14,
+  techCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: IS_SMALL_DEVICE ? 14 : 18,
     borderWidth: 1,
-    borderColor: "#F0D5D5",
-    backgroundColor: "#FFF7F7",
+    borderColor: COLORS.border,
+  },
+
+  techTitle: {
+    fontSize: IS_SMALL_DEVICE ? 14 : 15,
+    fontWeight: "900",
+    color: COLORS.text,
+    marginBottom: 15,
+  },
+
+  techRow: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+
+  techIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#E8F2FB",
+    alignItems: "center",
     justifyContent: "center",
+    marginRight: 11,
   },
 
-  secondaryDanger: {
-    backgroundColor: "#F1FBF6",
-    borderColor: "#D4EFDF",
+  techTextBox: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
   },
 
-  secondaryButtonText: {
-    color: "#D93036",
-    fontSize: 10,
+  techRowTitle: {
+    fontSize: 11,
     fontWeight: "800",
-    marginLeft: 7,
+    color: COLORS.text,
   },
 
-  secondarySuccessText: {
-    color: "#159A5B",
-  },
-
-  buttonPressed: {
-    opacity: 0.8,
-    transform: [
-      {
-        scale: 0.98,
-      },
-    ],
-  },
-
-  // FOOTER
-
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-  },
-
-  footerText: {
-    color: "#8795A5",
-    fontSize: 8,
-    marginLeft: 5,
-    textAlign: "center",
+  techRowSub: {
+    fontSize: 9,
+    color: COLORS.muted,
+    marginTop: 3,
   },
 });

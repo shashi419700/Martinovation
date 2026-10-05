@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import StatCard from "./StatCard";
 const API_URL =
-  "http://10.132.14.63:5000/api/statistics";
+  "http://10.244.24.63:5000/api/statistics";
 
 /*
   Backend response:

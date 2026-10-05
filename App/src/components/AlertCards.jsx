@@ -292,7 +292,7 @@ export default function AlertCards({
 
   const accessibilityStatus = accessibilityData?.status || "Live";
 
-  const accessibilityText = accessibilityData?.message || "View NER Risk Map";
+  const accessibilityText = accessibilityData?.message || "View Risk Map";
 
   return (
     <View style={styles.container}>
@@ -342,7 +342,7 @@ export default function AlertCards({
           icon="map"
           title={`Accessibility • ${accessibilityStatus}`}
           mainText={accessibilityText}
-          subtitle="Open live NER risk map"
+          subtitle="Open live risk map"
           index={2}
           onPress={() => navigation?.navigate("Map")}
         />

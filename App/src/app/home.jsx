@@ -3,7 +3,6 @@ import { View, ScrollView, StyleSheet, StatusBar } from "react-native";
 
 import HomeHeader from "../components/HomeHeader";
 import AlertCards from "../components/AlertCards";
-import StatisticsSection from "../components/StatisticsSection";
 import AIRecommendedActions from "../components/AIRecommendedActions";
 import LiveAccessibilityMap from "../components/LiveAccessibilityMap";
 // import QuickActions from "../components/QuickAction";
@@ -26,11 +25,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.content}>
           <AlertCards navigation={navigation} />
 
-          <StatisticsSection />
-
           <AIRecommendedActions navigation={navigation} />
-
-          <LiveAccessibilityMap navigation={navigation} />
 
           {/* <QuickActions navigation={navigation} /> */}
 

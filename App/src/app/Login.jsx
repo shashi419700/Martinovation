@@ -151,11 +151,13 @@ export default function LoginScreen() {
       });
 
       if (response.data?.token) {
+        console.log("Token received:", response.data.token);
         await saveToken(response.data.token);
       }
 
       if (response.data?.user) {
         await saveUser(response.data.user);
+        
       }
 
       setLoading(false);

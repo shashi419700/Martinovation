@@ -56,59 +56,6 @@ export default function AIRecommendedActions({
       {/* Content */}
       <View style={styles.content}>
         {/* Shipment Info */}
-        <View style={styles.shipmentInfo}>
-          <View style={styles.highRiskPill}>
-            <Ionicons
-              name="warning"
-              size={11}
-              color="#FFFFFF"
-            />
-
-            <Text style={styles.pillText}>
-              High Risk
-            </Text>
-          </View>
-
-          <Text style={styles.shipmentTitle}>
-            Medicine shipment #M102
-          </Text>
-
-          <Text style={styles.routeText}>
-            Guwahati → Tawang
-          </Text>
-
-          <View style={styles.meta}>
-            <Ionicons
-              name="lock-closed"
-              size={15}
-              color="#64748B"
-            />
-
-            <Text style={styles.metaText}>
-              Medicines
-            </Text>
-
-            <Text style={styles.divider}>|</Text>
-
-            <Text style={styles.metaText}>
-              500 boxes
-            </Text>
-          </View>
-
-          <View style={styles.riskMessage}>
-            <Ionicons
-              name="warning"
-              size={15}
-              color="#DC2626"
-            />
-
-            <Text style={styles.riskText}>
-              Current route has 78% disruption risk due
-              to heavy rainfall and landslide
-              probability.
-            </Text>
-          </View>
-        </View>
 
         {/* Recommendation */}
         <View style={styles.recommendation}>
@@ -125,7 +72,7 @@ export default function AIRecommendedActions({
           </View>
 
           <Text style={styles.switchTitle}>
-            Switch to Route B
+            Switch to Safest Route
           </Text>
 
           <View style={styles.etaRow}>

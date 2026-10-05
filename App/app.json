@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Semicolon_Troops",
+    "slug": "Semicolon_Troops",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "package": "com.shashi41970.Semicolon_Troops"
+    },
+    "web": {
+      "favicon": ""
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-audio",
+      "expo-video"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "dabafdfb-d2be-4036-a36c-bf69012e518c"
+      }
+    }
+  }
+}
